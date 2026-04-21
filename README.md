@@ -69,4 +69,4 @@ Easily modify your Server and Gameplay Configurations:
 
 ## Contributers
 
-Original GUI and Design By: (https://github.com/psbrowand/Windrose-Server-Manager)
+Original Design By: (https://github.com/psbrowand/Windrose-Server-Manager)
