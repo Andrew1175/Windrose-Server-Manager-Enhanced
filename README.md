@@ -33,7 +33,7 @@ A dedicated server manager for [Windrose](https://store.steampowered.com/app/304
 
 ### How to Run
 
-1. **Download the latest version** — click *latest Version > Download ZIP*:
+1. **Download the latest version**:
    ```
    https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases
    ```
