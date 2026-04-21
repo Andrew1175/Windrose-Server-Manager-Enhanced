@@ -1,6 +1,6 @@
 # Windrose Server Manager Enhanced
 
-A dedicated server manager for [Windrose](https://store.steampowered.com/app/3041230/Windrose/)
+An Open Source dedicated server manager for [Windrose](https://store.steampowered.com/app/3041230/Windrose/)
 
 ---
 
