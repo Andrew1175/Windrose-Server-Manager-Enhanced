@@ -33,9 +33,9 @@ A dedicated server manager for [Windrose](https://store.steampowered.com/app/304
 
 ### How to Run
 
-1. **Download the latest version**:
+1. **Download the latest version**: - Extract the .zip to a folder of your choice
    ```
-   https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases
+   https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases/latest
    ```
 2. **Run `Windrose-Server-Manager.exe`**
 3. Follow the Setup Wizard to configure a new dedicated server or to use your pre-existing one.
