@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -12,6 +12,9 @@ DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.0.3": [
+        "Updated the Auto-Backup feature to allow for custom backup intervals.",
+    ],
     "1.0.2": [
         "Fixed the 'Check for Updates' feature not working correctly.",
     ],

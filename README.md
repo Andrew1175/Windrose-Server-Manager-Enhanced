@@ -26,7 +26,7 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 - **Live log viewer** — color-coded, filterable (All / Players / Warnings / Errors) with auto-scroll toggle
 - **Config editor** — Edit Server and Gameplay settings directly from the manager
 - **One-click world backup** — Zip your save data to a timestamped archive
-- **Auto-backup** — Schedule automatic backups at 1, 4, 8, 16, or 24-hour intervals
+- **Auto-backup** — Schedule automatic backups at customized times (Hours or Minutes)
 - **Scheduled daily restarts**
 - **Auto-restart on crash** — Relaunches automatically if the server is not running
 - **Player history** — Persistent log of who joined and left

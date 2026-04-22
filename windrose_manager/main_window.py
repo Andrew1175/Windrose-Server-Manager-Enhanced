@@ -575,10 +575,17 @@ class WindroseServerManagerApp:
         bf2.pack(anchor="w", pady=4)
         self.var_auto_backup = tk.BooleanVar(value=False)
         ttk.Checkbutton(bf2, text="Auto-backup every", variable=self.var_auto_backup, command=self._on_auto_backup_toggle).pack(side=tk.LEFT)
-        self.cmb_backup_iv = ttk.Combobox(bf2, values=("1 hour", "4 hours", "8 hours", "16 hours", "24 hours"), state="readonly", width=10)
-        self.cmb_backup_iv.pack(side=tk.LEFT, padx=6)
-        self.cmb_backup_iv.current(1)
-        self.cmb_backup_iv.bind("<<ComboboxSelected>>", lambda e: self._reschedule_auto_backup())
+        self.ent_backup_interval = ttk.Entry(bf2, width=6)
+        self.ent_backup_interval.pack(side=tk.LEFT, padx=6)
+        self.ent_backup_interval.insert(0, "4")
+        self.cmb_backup_unit = ttk.Combobox(
+            bf2, values=("Hours", "Minutes"), state="readonly", width=9
+        )
+        self.cmb_backup_unit.pack(side=tk.LEFT)
+        self.cmb_backup_unit.set("Hours")
+        self.ent_backup_interval.bind("<FocusOut>", lambda e: self._reschedule_auto_backup())
+        self.ent_backup_interval.bind("<Return>", lambda e: self._reschedule_auto_backup())
+        self.cmb_backup_unit.bind("<<ComboboxSelected>>", lambda e: self._reschedule_auto_backup())
         self.lbl_next_backup = tk.Label(b, text="", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_next_backup.pack(anchor="w")
 
@@ -999,7 +1006,9 @@ class WindroseServerManagerApp:
     def _save_settings(self) -> None:
         self.mgr.auto_restart = self.var_auto_restart.get()
         self.mgr.auto_backup = self.var_auto_backup.get()
-        self.mgr.backup_interval = self.cmb_backup_iv.current()
+        interval_value, interval_unit = self._read_backup_interval_from_ui()
+        self.mgr.backup_interval_value = interval_value
+        self.mgr.backup_interval_unit = interval_unit
         self.mgr.schedule_enabled = self.var_schedule.get()
         self.mgr.schedule_time = self.ent_schedule_time.get().strip()
         settings.save_manager_settings(self.paths, self.mgr, self.client)
@@ -1008,8 +1017,9 @@ class WindroseServerManagerApp:
         self.mgr = settings.load_manager_settings(self.paths)
         self.var_auto_restart.set(self.mgr.auto_restart)
         self.var_auto_backup.set(self.mgr.auto_backup)
-        if 0 <= self.mgr.backup_interval < 5:
-            self.cmb_backup_iv.current(self.mgr.backup_interval)
+        self.ent_backup_interval.delete(0, tk.END)
+        self.ent_backup_interval.insert(0, str(self.mgr.backup_interval_value))
+        self.cmb_backup_unit.set("Minutes" if self.mgr.backup_interval_unit == "minutes" else "Hours")
         self.var_schedule.set(self.mgr.schedule_enabled)
         self.ent_schedule_time.delete(0, tk.END)
         self.ent_schedule_time.insert(0, self.mgr.schedule_time)
@@ -1592,9 +1602,24 @@ class WindroseServerManagerApp:
         except OSError as e:
             self.log(f"Export error: {e}")
 
-    def _backup_interval_hours(self) -> int:
-        idx = self.cmb_backup_iv.current()
-        return (1, 4, 8, 16, 24)[idx] if 0 <= idx < 5 else 4
+    def _read_backup_interval_from_ui(self) -> tuple[int, str]:
+        raw = (self.ent_backup_interval.get() or "").strip()
+        try:
+            n = int(raw)
+        except ValueError:
+            n = 4
+        n = max(1, n)
+        unit = "minutes" if self.cmb_backup_unit.get().strip().lower().startswith("minute") else "hours"
+        return n, unit
+
+    def _backup_interval_seconds(self) -> int:
+        n, unit = self._read_backup_interval_from_ui()
+        return n * 60 if unit == "minutes" else n * 3600
+
+    def _backup_interval_display(self) -> str:
+        n, unit = self._read_backup_interval_from_ui()
+        label = "minute" if unit == "minutes" else "hour"
+        return f"{n} {label}" + ("" if n == 1 else "s")
 
     def _on_backup(self) -> None:
         if not self.paths.saves_base.is_dir():
@@ -1624,8 +1649,8 @@ class WindroseServerManagerApp:
         if self._auto_backup_after:
             self.root.after_cancel(self._auto_backup_after)
             self._auto_backup_after = None
-        hours = self._backup_interval_hours()
-        ms = int(hours * 3600 * 1000)
+        seconds = self._backup_interval_seconds()
+        ms = int(seconds * 1000)
 
         def tick():
             if not self.paths.saves_base.is_dir():
@@ -1637,14 +1662,14 @@ class WindroseServerManagerApp:
                     self.log(f"Auto-backup created: {zp}")
                 except OSError as e:
                     self.log(f"Auto-backup error: {e}")
-            nxt = datetime.now() + timedelta(hours=self._backup_interval_hours())
+            nxt = datetime.now() + timedelta(seconds=self._backup_interval_seconds())
             self.lbl_next_backup.config(text=f"Next auto-backup: {nxt.strftime('%I:%M %p')}")
             self._auto_backup_after = self.root.after(ms, tick)
 
         self._auto_backup_after = self.root.after(ms, tick)
-        nxt = datetime.now() + timedelta(hours=hours)
+        nxt = datetime.now() + timedelta(seconds=seconds)
         self.lbl_next_backup.config(text=f"Next auto-backup: {nxt.strftime('%I:%M %p')}")
-        self.log(f"Auto-backup enabled: every {hours} hour(s)")
+        self.log(f"Auto-backup enabled: every {self._backup_interval_display()}")
 
     def _stop_auto_backup_timer(self) -> None:
         if self._auto_backup_after:

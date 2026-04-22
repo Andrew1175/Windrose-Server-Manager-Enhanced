@@ -111,7 +111,8 @@ def save_client_settings(paths, s: ClientInstallSettings) -> None:
 class ManagerSettings:
     auto_restart: bool = False
     auto_backup: bool = False
-    backup_interval: int = 1  # combobox index 0..4
+    backup_interval_value: int = 4
+    backup_interval_unit: str = "hours"
     schedule_enabled: bool = False
     schedule_time: str = "04:00"
     steamcmd_force_install_dir: str | None = None
@@ -127,8 +128,15 @@ def load_manager_settings(paths) -> ManagerSettings:
             m.auto_restart = bool(s["AutoRestart"])
         if "AutoBackup" in s:
             m.auto_backup = bool(s["AutoBackup"])
-        if "BackupInterval" in s:
-            m.backup_interval = int(s["BackupInterval"])
+        if "BackupIntervalValue" in s:
+            m.backup_interval_value = max(1, int(s["BackupIntervalValue"]))
+        elif "BackupInterval" in s:
+            # Backward compatibility with old combobox index storage.
+            idx = int(s["BackupInterval"])
+            m.backup_interval_value = (1, 4, 8, 16, 24)[idx] if 0 <= idx < 5 else 4
+        if "BackupIntervalUnit" in s:
+            u = str(s["BackupIntervalUnit"]).strip().lower()
+            m.backup_interval_unit = "minutes" if u.startswith("minute") else "hours"
         if "ScheduleEnabled" in s:
             m.schedule_enabled = bool(s["ScheduleEnabled"])
         if s.get("ScheduleTime"):
@@ -148,7 +156,9 @@ def save_manager_settings(
     payload = {
         "AutoRestart": m.auto_restart,
         "AutoBackup": m.auto_backup,
-        "BackupInterval": m.backup_interval,
+        "BackupInterval": m.backup_interval_value,
+        "BackupIntervalValue": m.backup_interval_value,
+        "BackupIntervalUnit": m.backup_interval_unit,
         "ScheduleEnabled": m.schedule_enabled,
         "ScheduleTime": m.schedule_time,
         "InstallClientChoiceSaved": client.install_client_choice_saved,
