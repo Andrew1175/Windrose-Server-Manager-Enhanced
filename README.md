@@ -4,19 +4,6 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 > This is a Python adaptation of the Windrose Server Manager project (https://github.com/psbrowand/Windrose-Server-Manager). It includes additional features such as native SteamCMD support and other enhancements. Since I’m not very experienced with PowerShell, I created this Python version to better maintain and expand the application.
 
-| Dashboard                          | Config                       |
-| ---------------------------------- | ---------------------------- |
-| ![Dashboard](Images/Dashboard.png) | ![Config](Images/Config.png) |
-
-| Log                    | Tools                    |
-| ---------------------- | ---------------------- |
-| ![Log](Images/Log.png) | ![Tools](Images/Tools.png) |
-
-Install                        |
------------------------------- |
-![Install](Images/Install.png) |
-
-
 ---
 
 ## Features
@@ -57,15 +44,15 @@ Install                        |
 
 ---
 
-## Application Guide
+## Screenshots
 
-| Tab | What it does |
-|---|---|
-| **Dashboard** | Live stats, player list, auto-restart toggle |
-| **Config** | Edit `ServerDescription.json` and `WorldDescription.json` via form fields and sliders |
-| **Log** | Live-tailing server log with color coding and filters (All / Players / Warnings / Errors) |
-| **Tools** | Automated Server Manager Updater, Patch Notes, Manual and Auto Backup, Scheduled Restarts |
-| **Install** | Configure Server Directories, Automated Game Server Updater, Verify everything is installed properly |
+| Dashboard                          | Config                       |
+| ---------------------------------- | ---------------------------- |
+| ![Dashboard](Images/Dashboard.png) | ![Config](Images/Config.png) |
+
+| Log                    | Tools                    |
+| ---------------------- | ---------------------- |
+| ![Log](Images/Log.png) | ![Tools](Images/Tools.png) |
 
 ---
 
