@@ -192,25 +192,50 @@ param([string]$JsonB64)
 $selfPath = $MyInvocation.MyCommand.Path
 $jsonText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($JsonB64))
 $j = $jsonText | ConvertFrom-Json
-$waitFor = [int]$j.wait_pid
-while ($true) {
-  $proc = Get-Process -Id $waitFor -ErrorAction SilentlyContinue
-  if (-not $proc) { break }
-  Start-Sleep -Milliseconds 500
+$logPath = Join-Path $j.dest "update-helper.log"
+function LogLine([string]$msg) {
+  $line = "$(Get-Date -Format s)  $msg"
+  Add-Content -Path $logPath -Value $line -ErrorAction SilentlyContinue
 }
-$src = $j.source
-$dst = $j.dest
-$null = & robocopy $src $dst /E /IS /IT /IM /R:3 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP
-if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $j.exe
-if ($j.cwd) { $psi.WorkingDirectory = $j.cwd }
-if ($j.args) { $psi.Arguments = $j.args }
-$psi.UseShellExecute = $true
-[System.Diagnostics.Process]::Start($psi) | Out-Null
-Start-Sleep -Seconds 2
-if ($j.cleanup) {
-  Remove-Item -LiteralPath $j.cleanup -Recurse -Force -ErrorAction SilentlyContinue
+try {
+  LogLine "Updater helper started."
+  $waitFor = [int]$j.wait_pid
+  while ($true) {
+    $proc = Get-Process -Id $waitFor -ErrorAction SilentlyContinue
+    if (-not $proc) { break }
+    Start-Sleep -Milliseconds 500
+  }
+  LogLine "Main process exited. Applying files..."
+  $src = $j.source
+  $dst = $j.dest
+  if (-not (Test-Path -LiteralPath $dst)) {
+    New-Item -ItemType Directory -Path $dst -Force | Out-Null
+  }
+  Get-ChildItem -LiteralPath $src -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $dst -Recurse -Force -ErrorAction Stop
+  }
+  LogLine "File copy completed."
+  if ($j.cwd) {
+    if ($j.args) {
+      Start-Process -FilePath $j.exe -ArgumentList $j.args -WorkingDirectory $j.cwd -WindowStyle Normal
+    } else {
+      Start-Process -FilePath $j.exe -WorkingDirectory $j.cwd -WindowStyle Normal
+    }
+  } else {
+    if ($j.args) {
+      Start-Process -FilePath $j.exe -ArgumentList $j.args -WindowStyle Normal
+    } else {
+      Start-Process -FilePath $j.exe -WindowStyle Normal
+    }
+  }
+  LogLine "Restart launched."
+  Start-Sleep -Seconds 2
+  if ($j.cleanup) {
+    Remove-Item -LiteralPath $j.cleanup -Recurse -Force -ErrorAction SilentlyContinue
+    LogLine "Staging cleaned."
+  }
+} catch {
+  LogLine ("Updater helper failed: " + $_.Exception.Message)
 }
 Remove-Item -LiteralPath $selfPath -Force -ErrorAction SilentlyContinue
 """.strip()
@@ -222,9 +247,7 @@ Remove-Item -LiteralPath $selfPath -Force -ErrorAction SilentlyContinue
     except OSError as e:
         return False, str(e)
 
-    creationflags = 0
-    for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"):
-        creationflags |= getattr(subprocess, name, 0)
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
     try:
         subprocess.Popen(
@@ -242,7 +265,7 @@ Remove-Item -LiteralPath $selfPath -Force -ErrorAction SilentlyContinue
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            close_fds=True,
+            close_fds=False,
             creationflags=creationflags,
         )
     except OSError as e:
