@@ -27,9 +27,8 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 ## Requirements
 
 - Windows 10 or Windows 11
-- **Windrose** owned and installed via Steam or SteamCMD
 
-> If using Steam, The dedicated server files are bundled inside the Windrose game install. You do not need a separate dedicated server download.
+> If you choose to use Steam, The dedicated server files are bundled inside the Windrose game install. You do not need a separate dedicated server download.
 
 ---
 
