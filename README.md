@@ -8,9 +8,13 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 | ---------------------------------- | ---------------------------- |
 | ![Dashboard](Images/Dashboard.png) | ![Config](Images/Config.png) |
 
-| Log                    | Install                        |
-| ---------------------- | ------------------------------ |
-| ![Log](Images/Log.png) | ![Install](Images/Install.png) |
+| Log                    | Tools                    |
+| ---------------------- | ---------------------- |
+| ![Log](Images/Log.png) | ![Tools](Images/Tools.png) |
+
+Install                        |
+------------------------------ |
+![Install](Images/Install.png) |
 
 
 ---
