@@ -7,7 +7,6 @@ from pathlib import Path
 
 @dataclass
 class ServerPaths:
-    """Resolved Windrose server install paths (Windows server layout)."""
 
     server_dir: Path
 

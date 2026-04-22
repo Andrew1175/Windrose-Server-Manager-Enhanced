@@ -97,9 +97,8 @@ class WindroseServerManagerApp:
         self._wizard_bodies: list[tk.Frame] = []
         self._step_headers: list[tuple[tk.Label, tk.Label | None]] = []
 
-        self.latest_remote_version: str | None = None
-        self._update_check_thread: threading.Thread | None = None
-        self._update_check_result: tuple[str | None, str | None] | None = None
+        self._update_op_thread: threading.Thread | None = None
+        self._update_op_result: dict | None = None
 
         apply_dark_theme(root)
         root.title("Windrose Server Manager")
@@ -530,9 +529,6 @@ class WindroseServerManagerApp:
         self.lbl_cur_ver = tk.Label(uf, text="Current version: ...", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_cur_ver.pack(side=tk.LEFT, padx=(0, 12))
         tk_button(uf, "Check for Updates", self._on_check_update, small=True).pack(side=tk.LEFT, padx=2)
-        self.btn_update_now = tk_button(uf, "Update Now", self._on_update_now, bg=self.c["green_btn"], small=True)
-        self.btn_update_now.pack(side=tk.LEFT, padx=2)
-        self.btn_update_now.pack_forget()
         tk_button(uf, "Patch Notes", self._on_patch_notes, small=True).pack(side=tk.LEFT, padx=2)
         self.lbl_update_status = tk.Label(u, text="", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10), wraplength=620, justify=tk.LEFT)
         self.lbl_update_status.pack(anchor="w", pady=6)
@@ -1590,55 +1586,72 @@ class WindroseServerManagerApp:
             self.lbl_players_big.config(text=f"0 / {self.max_players}")
 
     def _on_check_update(self) -> None:
+        if process_ops.get_server_process():
+            messagebox.showinfo(
+                "Server running",
+                "Stop the Windrose dedicated server before checking for updates.\n\n"
+                "You cannot update the manager while the server is running.",
+            )
+            return
+
         self.lbl_update_status.config(text="Checking for updates...", fg=self.c["text_dim"])
-        self.btn_update_now.pack_forget()
+        self._update_op_result = None
 
-        def work():
-            self._update_check_result = updater.fetch_remote_version(constants.UPDATE_VERSION_URL)
-
-        self._update_check_thread = threading.Thread(target=work, daemon=True)
-        self._update_check_thread.start()
-        self.root.after(500, self._poll_update_check)
-
-    def _poll_update_check(self) -> None:
-        if self._update_check_thread and self._update_check_thread.is_alive():
-            self.root.after(500, self._poll_update_check)
-            return
-        self._update_check_thread = None
-        ver, err = self._update_check_result or (None, "No result")
-        self._update_check_result = None
-        if err:
-            self.lbl_update_status.config(text=f"Error: {err}", fg="tomato")
-            return
-        if ver:
-            self.latest_remote_version = ver
-            if updater.is_remote_newer(ver, constants.APP_VERSION):
-                self.lbl_update_status.config(
-                    text=f"Update available! Remote {ver}, you have {constants.APP_VERSION}.",
-                    fg=self.c["green"],
-                )
-                self.btn_update_now.pack(side=tk.LEFT, padx=2)
-            else:
-                self.lbl_update_status.config(
-                    text=f"You are up to date (version {constants.APP_VERSION}).", fg=self.c["green"]
+        def work() -> None:
+            def report(msg: str) -> None:
+                self.root.after(
+                    0,
+                    lambda m=msg: self.lbl_update_status.config(text=m, fg=self.c["text_dim"]),
                 )
 
-    def _on_update_now(self) -> None:
-        if not self.latest_remote_version:
-            self.lbl_update_status.config(text="Click Check for Updates first.")
+            self._update_op_result = updater.run_update_pipeline(constants.APP_VERSION, report)
+
+        self._update_op_thread = threading.Thread(target=work, daemon=True)
+        self._update_op_thread.start()
+        self.root.after(500, self._poll_update_apply)
+
+    def _poll_update_apply(self) -> None:
+        if self._update_op_thread and self._update_op_thread.is_alive():
+            self.root.after(500, self._poll_update_apply)
             return
-        if constants.UPDATE_ZIP_URL.strip():
-            self.lbl_update_status.config(text="Downloading and applying update...")
-            if updater.apply_zip_update(
-                constants.UPDATE_ZIP_URL, _app_package_dir(), lambda m: self.log(m)
-            ):
-                self.root.destroy()
-        else:
+        self._update_op_thread = None
+        res = self._update_op_result
+        self._update_op_result = None
+        if not res:
+            self.lbl_update_status.config(text="Error: No result from update check.", fg="tomato")
+            return
+        if not res.get("ok"):
+            self.lbl_update_status.config(text=f"Error: {res.get('error', 'Unknown error')}", fg="tomato")
+            return
+        if res.get("action") == "uptodate":
+            remote = res.get("remote", "")
+            self.lbl_update_status.config(
+                text=f"You are up to date. (Latest release is v{remote})",
+                fg=self.c["green"],
+            )
+            return
+        if res.get("action") == "ready":
+            remote = str(res.get("remote", ""))
+            payload: Path = res["payload"]
+            work: Path = res["work"]
+            self.lbl_update_status.config(
+                text=f"Version {remote} downloaded. The application will restart to finish the update.",
+                fg=self.c["green"],
+            )
             messagebox.showinfo(
                 "Update",
-                "Set UPDATE_ZIP_URL in windrose_manager/constants.py to a zip that contains "
-                "the windrose_manager package, or install updates manually from GitHub.",
+                f"Version {remote} will be installed when this application closes.\n\n"
+                "The Windrose Server Manager will restart automatically.",
             )
+            ok, err = updater.spawn_deferred_update(payload, work)
+            if not ok:
+                messagebox.showerror("Update failed", err or "Could not start the update helper.")
+                self.lbl_update_status.config(text=f"Error: {err}", fg="tomato")
+                shutil.rmtree(work, ignore_errors=True)
+                return
+            self.root.destroy()
+            return
+        self.lbl_update_status.config(text="Error: Unexpected update response.", fg="tomato")
 
     def _on_patch_notes(self) -> None:
         top = tk.Toplevel(self.root)

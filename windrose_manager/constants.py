@@ -2,15 +2,10 @@
 
 APP_VERSION = "1.0.0"
 
-# Raw URL of this file (or any file that defines APP_VERSION = "x.y") for "Check for Updates".
-UPDATE_VERSION_URL = (
-    "https://raw.githubusercontent.com/Andrew1175/Windrose-Server-Manager/main/"
-    "python/windrose_manager/constants.py"
+# GitHub REST API for the latest published release (used by Check for Updates).
+GITHUB_LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/Andrew1175/Windrose-Server-Manager-Enhanced/releases/latest"
 )
-
-# Optional: direct link to a source zip to apply in-app (folder inside zip must contain `windrose_manager/`).
-# Leave empty to disable zip-based self-update.
-UPDATE_ZIP_URL = ""
 
 DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
 

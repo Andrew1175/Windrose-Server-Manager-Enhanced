@@ -1,0 +1,7 @@
+# Local build files
+Create EXE.bat
+build/
+dist/
+windrose_manager/__pycache__
+Windrose-Server-Manager.spec
+windrose_client_settings.json
