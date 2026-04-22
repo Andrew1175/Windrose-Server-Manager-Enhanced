@@ -36,6 +36,7 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 ## Requirements
 
 - Windows 10 or Windows 11
+- Steam or SteamCMD
 
 ---
 
