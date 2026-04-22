@@ -41,6 +41,8 @@ class HoverToolTip:
         widget.bind("<Leave>", self._hide, add="+")
 
     def _show(self, _event=None) -> None:
+        if not self.text.strip():
+            return
         if self.tip:
             return
         x = self.widget.winfo_rootx() + 16
@@ -99,6 +101,7 @@ class WindroseServerManagerApp:
 
         self._update_op_thread: threading.Thread | None = None
         self._update_op_result: dict | None = None
+        self._install_blocked_by_running = False
 
         apply_dark_theme(root)
         root.title("Windrose Server Manager")
@@ -327,7 +330,22 @@ class WindroseServerManagerApp:
 
         pad = tk.Frame(inner, bg=self.c["bg"])
         pad.pack(fill=tk.BOTH, expand=True, padx=14, pady=10)
-        ttk.Label(pad, text="Server Settings", style="Section.TLabel").pack(anchor="w")
+        self._last_world_settings_enabled = False
+        self.lbl_config_lock = tk.Label(
+            pad,
+            text=(
+                "The dedicated server is currently running. You cannot edit any configurations "
+                "until the server is stopped."
+            ),
+            fg=self.c["accent"],
+            bg=self.c["bg"],
+            font=(None, 10),
+            wraplength=640,
+            justify=tk.LEFT,
+        )
+        self._hdr_server_settings = ttk.Label(pad, text="Server Settings", style="Section.TLabel")
+        self._hdr_server_settings.pack(anchor="w")
+        self.lbl_config_lock.pack_forget()
 
         sf = self._panel_frame(pad)
         sf.pack(fill=tk.X, pady=(0, 8))
@@ -354,9 +372,10 @@ class WindroseServerManagerApp:
         pwf = tk.Frame(sf_inner, bg=self.c["bg_panel"])
         pwf.grid(row=3, column=1, sticky="ew", pady=4)
         self.var_pw_en = tk.BooleanVar(value=False)
-        ttk.Checkbutton(pwf, text="Enable", variable=self.var_pw_en, command=self._toggle_pw_entry).pack(
-            side=tk.LEFT, padx=(0, 8)
+        self.chk_pw_en = ttk.Checkbutton(
+            pwf, text="Enable", variable=self.var_pw_en, command=self._toggle_pw_entry
         )
+        self.chk_pw_en.pack(side=tk.LEFT, padx=(0, 8))
         self.ent_password = ttk.Entry(pwf, width=40, show="*")
         self.ent_password.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.ent_password.config(state=tk.DISABLED)
@@ -459,10 +478,14 @@ class WindroseServerManagerApp:
 
         bf = tk.Frame(pad, bg=self.c["bg"])
         bf.pack(fill=tk.X, pady=12)
-        tk_button(bf, "Save Config", self._on_save_config, bg=self.c["green_btn"]).pack(side=tk.LEFT, padx=2)
-        tk_button(bf, "Reload Saved Config", self._on_reload_config, bg=self.c["gray_btn"]).pack(side=tk.LEFT, padx=2)
-        tk_button(bf, "Open Server Config", self._on_open_server_config, bg=self.c["blue_btn"]).pack(side=tk.LEFT, padx=2)
-        tk_button(bf, "Open World Config", self._on_open_world_json, bg=self.c["blue_btn"]).pack(side=tk.LEFT, padx=2)
+        self.btn_cfg_save = tk_button(bf, "Save Config", self._on_save_config, bg=self.c["green_btn"])
+        self.btn_cfg_save.pack(side=tk.LEFT, padx=2)
+        self.btn_cfg_reload = tk_button(bf, "Reload Saved Config", self._on_reload_config, bg=self.c["gray_btn"])
+        self.btn_cfg_reload.pack(side=tk.LEFT, padx=2)
+        self.btn_cfg_open_server = tk_button(bf, "Open Server Config", self._on_open_server_config, bg=self.c["blue_btn"])
+        self.btn_cfg_open_server.pack(side=tk.LEFT, padx=2)
+        self.btn_cfg_open_world = tk_button(bf, "Open World Config", self._on_open_world_json, bg=self.c["blue_btn"])
+        self.btn_cfg_open_world.pack(side=tk.LEFT, padx=2)
         self.lbl_cfg_status = tk.Label(pad, text="", fg=self.c["green"], bg=self.c["bg"], font=(None, 10))
         self.lbl_cfg_status.pack(anchor="w", pady=4)
 
@@ -643,6 +666,7 @@ class WindroseServerManagerApp:
         ib.pack(anchor="w")
         self.btn_install_server = tk_button(ib, "Install Server", self._on_install_server, bg=self.c["green_btn"])
         self.btn_install_server.pack(side=tk.LEFT)
+        self.tip_install_server = HoverToolTip(self.btn_install_server, "")
         self.lbl_install_warn = tk.Label(ib, text="", fg=self.c["accent"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_install_warn.pack(side=tk.LEFT, padx=12)
 
@@ -750,6 +774,10 @@ class WindroseServerManagerApp:
         if self.paths.server_exe.is_file():
             self.canvas_install.itemconfig(self._install_dot, fill="#00FF00")
             self.lbl_install_status.config(text="Server installed.", fg=self.c["green"])
+        # Keep Config tab lock state in sync with real process state, including
+        # the short shutdown window right after pressing Stop.
+        self._apply_config_tab_state()
+        self._apply_install_update_button_state()
 
     def _schedule_log_tail(self) -> None:
         self._update_log_viewer()
@@ -763,6 +791,7 @@ class WindroseServerManagerApp:
         self.btn_restart.config(state=tk.NORMAL)
         code = config_io.read_invite_code(self.paths)
         self.lbl_invite.config(text=code if code else "(pending...)")
+        self._apply_config_tab_state()
 
     def _set_ui_stopped(self) -> None:
         self.canvas_status.itemconfig(self._status_dot, fill=self.c["status_stopped"])
@@ -772,6 +801,46 @@ class WindroseServerManagerApp:
         self.btn_restart.config(state=tk.DISABLED)
         self.lbl_invite.config(text="--")
         self._reset_stats()
+        self._apply_config_tab_state()
+
+    def _apply_config_tab_state(self) -> None:
+        """While the dedicated server is running, block all Config tab changes."""
+        if process_ops.get_server_process():
+            self.lbl_config_lock.pack(anchor="w", pady=(0, 8), before=self._hdr_server_settings)
+            for w in (self.ent_srv_name, self.ent_invite_code, self.ent_proxy, self.ent_direct_port):
+                w.config(state="disabled")
+            self.scale_max.config(state=tk.DISABLED)
+            self.chk_pw_en.state(["disabled"])
+            self.ent_password.config(state="disabled")
+            self.btn_reveal_password.config(state=tk.DISABLED)
+            self.cmb_preset.config(state="disabled")
+            self.cmb_combat.config(state="disabled")
+            for sc, _vl in self._world_sliders.values():
+                sc.config(state=tk.DISABLED)
+            self.chk_coop_quests.state(["disabled"])
+            self.chk_easy_explore.state(["disabled"])
+            for b in (
+                self.btn_cfg_save,
+                self.btn_cfg_reload,
+                self.btn_cfg_open_server,
+                self.btn_cfg_open_world,
+            ):
+                b.config(state=tk.DISABLED)
+            return
+        self.lbl_config_lock.pack_forget()
+        for w in (self.ent_srv_name, self.ent_invite_code, self.ent_proxy, self.ent_direct_port):
+            w.config(state=tk.NORMAL)
+        self.scale_max.config(state=tk.NORMAL)
+        self.chk_pw_en.state(["!disabled"])
+        self._toggle_pw_entry()
+        for b in (
+            self.btn_cfg_save,
+            self.btn_cfg_reload,
+            self.btn_cfg_open_server,
+            self.btn_cfg_open_world,
+        ):
+            b.config(state=tk.NORMAL)
+        self._set_world_settings_enabled(self._last_world_settings_enabled)
 
     def _reset_stats(self) -> None:
         self.lbl_cpu.config(text="--")
@@ -1214,12 +1283,12 @@ class WindroseServerManagerApp:
             set_step(1, g, "\u2713", "Installed", fg_ok)
             self.btn_install_server.config(
                 text=(
-                    "Update with SteamCMD"
+                    "Update Server with SteamCMD"
                     if self.client.install_client == "SteamCMD"
                     else "Update Server"
                 )
             )
-            self.lbl_install_warn.config(text="Stop the server before updating")
+            self.lbl_install_warn.config(text="")
         elif steam_found:
             set_step(1, b, "2", "Ready to install", fg_muted)
             self.btn_install_server.config(text="Install Server")
@@ -1233,6 +1302,20 @@ class WindroseServerManagerApp:
             self.canvas_install.itemconfig(self._install_dot, fill=self.c["red"])
             self.lbl_install_status.config(text="Not installed - see Install tab", fg=self.c["red"])
             self.nb.select(self.nb.tabs()[4])
+        self._apply_install_update_button_state()
+
+    def _apply_install_update_button_state(self) -> None:
+        if process_ops.get_server_process():
+            self.btn_install_server.config(state=tk.DISABLED)
+            self._install_blocked_by_running = True
+            self.tip_install_server.text = (
+                "You cannot update the server while it's running. Be sure to stop the server first."
+            )
+            return
+        if self._install_blocked_by_running:
+            self.btn_install_server.config(state=tk.NORMAL)
+            self._install_blocked_by_running = False
+        self.tip_install_server.text = ""
 
     def _read_server_config_ui(self) -> None:
         data = config_io.read_server_config_dict(self.paths)
@@ -1302,6 +1385,7 @@ class WindroseServerManagerApp:
             self.cmb_combat.set(cd)
 
     def _set_world_settings_enabled(self, enabled: bool) -> None:
+        self._last_world_settings_enabled = enabled
         preset_state = "readonly" if enabled else "disabled"
         combat_state = "readonly" if enabled else "disabled"
         self.cmb_preset.config(state=preset_state)
@@ -1769,12 +1853,13 @@ class WindroseServerManagerApp:
 
     def _on_install_server(self) -> None:
         if process_ops.get_server_process():
-            if messagebox.askyesno(
-                "Server Running",
-                "The server is running. Stop the server now?",
-            ):
-                process_ops.stop_all_server_processes()
-                self.root.after(2000, self._run_install_continue)
+            self._apply_install_update_button_state()
+            self.txt_install_log.delete("1.0", tk.END)
+            self.txt_install_log.insert(
+                tk.END,
+                "ERROR: You cannot update the server while it's running. "
+                "Be sure to stop the server first.",
+            )
             return
         self._run_install_continue()
 

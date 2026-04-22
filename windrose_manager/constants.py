@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -12,8 +12,12 @@ DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.0.1": [
+        "Added a safety check to prevent configuration changes while the server is running.",
+        "Added a safety check to prevent the server from being updated while it is running.",
+    ],
     "1.0.0": [
-        "Intial Release",
+        "Initial Release",
     ]
 }
 
