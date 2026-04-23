@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -8,10 +8,16 @@ GITHUB_LATEST_RELEASE_API_URL = (
 )
 
 DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
+GITHUB_REPO_URL = "https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced"
+GITHUB_ISSUES_NEW_URL = "https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/issues/new/choose"
 
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.1.2": [
+        "Created a new help tab to provide additional information about the Server Manager.",
+        "Added a new crash counter to the dashboard to track the number of times the game server has crashed.",
+    ],
     "1.1.1": [
         "Removed a safety check to prevent the Server Manager from being updated while the game server is running.\n(You can now safely update the Server Manager while the game server is running without interrupting the game server.)",
         "Fixed an issue with the Uptime statistic not showing the minutes correctly.",

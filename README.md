@@ -34,7 +34,9 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 ### How to Run
 
-1. **Download the latest version**: - Extract the .zip to a folder of your choice
+1. **Download the latest version**: - Extract the .zip to a folder of your choice. Be sure to keep all contents in the .zip together:
+  - Windrose-Server-Manager.exe
+  - _internal (Folder)
    ```
    https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases/latest
    ```
@@ -59,4 +61,4 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 ## Contributers
 
-Original Design By: (https://github.com/psbrowand/Windrose-Server-Manager)
+Original GUI Design By: (https://github.com/psbrowand/Windrose-Server-Manager)

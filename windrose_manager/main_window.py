@@ -179,16 +179,6 @@ class WindroseServerManagerApp:
         right = tk.Frame(hdr, bg=c["bg_header"])
         right.grid(row=0, column=1, sticky="e")
         tk_button(right, "Share", self._on_share, bg=c["blue_btn"], small=True).pack()
-        self.lbl_donate_hdr = tk.Label(
-            right,
-            text="Click Here to Donate",
-            fg=c["green"],
-            bg=c["bg_header"],
-            font=(None, 9),
-            cursor="hand2",
-        )
-        self.lbl_donate_hdr.pack(pady=(4, 0))
-        self.lbl_donate_hdr.bind("<Button-1>", lambda e: webbrowser.open(constants.DONATE_URL))
 
         # Notebook
         self.nb = ttk.Notebook(root)
@@ -199,6 +189,7 @@ class WindroseServerManagerApp:
         self._build_tab_log()
         self._build_tab_tools()
         self._build_tab_install()
+        self._build_tab_help()
 
         self.lbl_version_corner = tk.Label(
             root,
@@ -254,7 +245,7 @@ class WindroseServerManagerApp:
 
         stats = self._panel_frame(tab)
         stats.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 10))
-        for i in range(4):
+        for i in range(5):
             stats.columnconfigure(i, weight=1)
         def stat_cell(col, title, key):
             f = tk.Frame(stats, bg=self.c["bg_panel"])
@@ -286,6 +277,8 @@ class WindroseServerManagerApp:
         self.lbl_players_big.config(fg="#70C48A")
         self.lbl_uptime_big = stat_cell(3, "UPTIME", "up")
         self.lbl_uptime_big.config(fg="#A0C4E0")
+        self.lbl_crashes_big = stat_cell(4, "CRASHES", "cr")
+        self.lbl_crashes_big.config(fg="#CC3333")
 
         mid = tk.Frame(tab, bg=self.c["bg"])
         mid.grid(row=1, column=0, sticky="nsew", padx=12, pady=0)
@@ -788,6 +781,80 @@ class WindroseServerManagerApp:
             justify=tk.LEFT,
         ).pack(anchor="w", pady=(6, 0))
 
+    def _build_tab_help(self) -> None:
+        tab = tk.Frame(self.nb, bg=self.c["bg"])
+        self.nb.add(tab, text="Help")
+        tab.columnconfigure(0, weight=1)
+
+        about_panel = self._panel_frame(tab)
+        about_panel.pack(fill=tk.X, padx=14, pady=12)
+        about = tk.Frame(about_panel, bg=self.c["bg_panel"])
+        about.pack(fill=tk.X, padx=12, pady=10)
+
+        tk.Label(
+            about,
+            text="About",
+            font=(None, 12, "bold"),
+            fg=self.c["accent"],
+            bg=self.c["bg_panel"],
+        ).pack(anchor="w")
+
+        tk.Label(
+            about,
+            text="Useful project links for updates, documentation, and support.",
+            fg=self.c["text_dim"],
+            bg=self.c["bg_panel"],
+            font=(None, 10),
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(4, 8))
+
+        actions = tk.Frame(about, bg=self.c["bg_panel"])
+        actions.pack(anchor="w")
+        tk_button(
+            actions,
+            "GitHub",
+            lambda: webbrowser.open(constants.GITHUB_REPO_URL),
+            small=True,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        tk_button(
+            actions,
+            "Report Issue or Feature Request",
+            lambda: webbrowser.open(constants.GITHUB_ISSUES_NEW_URL),
+            small=True,
+        ).pack(side=tk.LEFT)
+
+        donation_panel = self._panel_frame(tab)
+        donation_panel.pack(fill=tk.X, padx=14, pady=(0, 12))
+        donation = tk.Frame(donation_panel, bg=self.c["bg_panel"])
+        donation.pack(fill=tk.X, padx=12, pady=10)
+
+        tk.Label(
+            donation,
+            text="Donation",
+            font=(None, 12, "bold"),
+            fg=self.c["accent"],
+            bg=self.c["bg_panel"],
+        ).pack(anchor="w")
+
+        tk.Label(
+            donation,
+            text="If this Server Manager helps you, any small donation is greatly appreciated!",
+            fg=self.c["text_dim"],
+            bg=self.c["bg_panel"],
+            font=(None, 10),
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(4, 8))
+
+        tk_button(
+            donation,
+            "Buy me a Beer",
+            lambda: webbrowser.open(constants.DONATE_URL),
+            bg=self.c["green_btn"],
+            small=True,
+        ).pack(anchor="w")
+
     def _add_wizard_step(self, pad, num: int, title: str) -> None:
         fr = self._panel_frame(pad)
         fr.pack(fill=tk.X, pady=(0, 6))
@@ -870,6 +937,9 @@ class WindroseServerManagerApp:
             else:
                 self._set_ui_stopped()
                 self.log("Server process ended unexpectedly.")
+                self.mgr.crash_count += 1
+                self._update_crash_stat()
+                settings.save_manager_settings(self.paths, self.mgr, self.client)
                 self._discord_notify_crash()
                 self.server_popen = None
                 if self.var_auto_restart.get():
@@ -961,7 +1031,11 @@ class WindroseServerManagerApp:
         self.lbl_players_big.config(text="--")
         self.lbl_uptime_big.config(text="--")
         self.lbl_uptime_hdr.config(text="")
+        self._update_crash_stat()
         self.list_players.delete(0, tk.END)
+
+    def _update_crash_stat(self) -> None:
+        self.lbl_crashes_big.config(text=str(max(0, int(self.mgr.crash_count))))
 
     def _update_stats(self, proc: psutil.Process) -> None:
         try:
@@ -1187,6 +1261,7 @@ class WindroseServerManagerApp:
 
     def _load_all_settings(self) -> None:
         self.mgr = settings.load_manager_settings(self.paths)
+        self._update_crash_stat()
         self.var_auto_restart.set(self.mgr.auto_restart)
         self.var_auto_backup.set(self.mgr.auto_backup)
         self.ent_backup_interval.delete(0, tk.END)

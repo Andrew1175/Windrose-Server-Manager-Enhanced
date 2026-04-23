@@ -118,6 +118,7 @@ DEFAULT_DISCORD_MSG_CRASH = (
 @dataclass
 class ManagerSettings:
     auto_restart: bool = False
+    crash_count: int = 0
     auto_backup: bool = False
     backup_interval_value: int = 4
     backup_interval_unit: str = "hours"
@@ -140,6 +141,8 @@ def load_manager_settings(paths) -> ManagerSettings:
         s = json.loads(paths.settings_file.read_text(encoding="utf-8"))
         if "AutoRestart" in s:
             m.auto_restart = bool(s["AutoRestart"])
+        if "CrashCount" in s:
+            m.crash_count = max(0, int(s["CrashCount"]))
         if "AutoBackup" in s:
             m.auto_backup = bool(s["AutoBackup"])
         if "BackupIntervalValue" in s:
@@ -181,6 +184,7 @@ def save_manager_settings(
 ) -> None:
     payload = {
         "AutoRestart": m.auto_restart,
+        "CrashCount": m.crash_count,
         "AutoBackup": m.auto_backup,
         "BackupInterval": m.backup_interval_value,
         "BackupIntervalValue": m.backup_interval_value,
