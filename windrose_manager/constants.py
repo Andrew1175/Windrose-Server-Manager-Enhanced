@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -12,6 +12,10 @@ DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.1.1": [
+        "Removed a safety check to prevent the Server Manager from being updated while the game server is running.\n(You can now safely update the Server Manager while the game server is running without interrupting the game server.)",
+        "Fixed an issue with the Uptime statistic not showing the minutes correctly.",
+    ],
     "1.1.0": [
         "Added a new Discord Webhook feature to send notifications to a Discord channel when the server starts, stops, restarts, schedules a restart, or crashes.",
         "Updated RAM display to show total percentage used instead of just the size.",
@@ -23,8 +27,8 @@ PATCH_NOTES: dict[str, list[str]] = {
         "Fixed the 'Check for Updates' feature not working correctly.",
     ],
     "1.0.1": [
-        "Added a safety check to prevent configuration changes while the server is running.",
-        "Added a safety check to prevent the server from being updated while it is running.",
+        "Added a safety check to prevent configuration changes while the game server is running.",
+        "Added a safety check to prevent the Server Manager from being updated while the game server is running.",
     ],
     "1.0.0": [
         "Initial Release",

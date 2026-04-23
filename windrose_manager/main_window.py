@@ -992,10 +992,12 @@ class WindroseServerManagerApp:
             self.lbl_players_big.config(text=f"{len(self.online_players)} / {self.max_players}")
             if self.start_time:
                 up = datetime.now() - self.start_time
-                if up.total_seconds() >= 3600:
-                    up_str = f"{int(up.total_seconds()//3600)}h {up.seconds//60}m"
+                total_s = int(up.total_seconds())
+                if total_s >= 3600:
+                    # Minutes are within the current hour, not total minutes (up.seconds//60 is wrong).
+                    up_str = f"{total_s // 3600}h {(total_s % 3600) // 60}m"
                 else:
-                    up_str = f"{up.seconds//60}m {up.seconds%60}s"
+                    up_str = f"{total_s // 60}m {total_s % 60}s"
                 self.lbl_uptime_big.config(text=up_str)
                 self.lbl_uptime_hdr.config(text=f"Up: {up_str}")
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -1891,14 +1893,6 @@ class WindroseServerManagerApp:
             self.lbl_players_big.config(text=f"0 / {self.max_players}")
 
     def _on_check_update(self) -> None:
-        if process_ops.get_server_process():
-            messagebox.showinfo(
-                "Server running",
-                "Stop the Windrose dedicated server before checking for updates.\n\n"
-                "You cannot update the manager while the server is running.",
-            )
-            return
-
         self.lbl_update_status.config(text="Checking for updates...", fg=self.c["text_dim"])
         self._update_op_result = None
 
