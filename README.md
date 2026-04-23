@@ -2,8 +2,6 @@
 
 An Open Source dedicated server manager for [Windrose](https://store.steampowered.com/app/3041230/Windrose/)
 
-> This is a Python adaptation of the Windrose Server Manager project (https://github.com/psbrowand/Windrose-Server-Manager). It includes additional features such as native SteamCMD support and other enhancements. Since I’m not very experienced with PowerShell, I created this Python version to better maintain and expand the application.
-
 ---
 
 ## Features
