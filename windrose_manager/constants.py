@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.1.0"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -12,6 +12,10 @@ DONATE_URL = "https://buymeacoffee.com/TheWisestGuy"
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.1.0": [
+        "Added a new Discord Webhook feature to send notifications to a Discord channel when the server starts, stops, restarts, schedules a restart, or crashes.",
+        "Updated RAM display to show total percentage used instead of just the size.",
+    ],
     "1.0.3": [
         "Updated the Auto-Backup feature to allow for custom backup intervals.",
     ],

@@ -15,7 +15,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import psutil
 
-from . import config_io, constants, install_ops, players, process_ops, settings, steam, updater
+from . import config_io, constants, discord_webhook, install_ops, players, process_ops, settings, steam, updater
 from .backup import backup_saves_now, find_latest_backup
 from .paths import ServerPaths
 from .settings import ClientInstallSettings, ManagerSettings
@@ -102,11 +102,13 @@ class WindroseServerManagerApp:
         self._update_op_thread: threading.Thread | None = None
         self._update_op_result: dict | None = None
         self._install_blocked_by_running = False
+        self._restart_pending = False
 
         apply_dark_theme(root)
         root.title("Windrose Server Manager")
-        root.minsize(560, 640)
-        root.geometry("700x780")
+        # Wide enough for two-column Tools (App/Hosting, Backup/Schedule) without clipping.
+        root.minsize(760, 660)
+        root.geometry("920x820")
         try:
             candidates: list[Path] = []
             # Source run: project root
@@ -263,8 +265,23 @@ class WindroseServerManagerApp:
             return lbl
         self.lbl_cpu = stat_cell(0, "CPU", "cpu")
         self.lbl_cpu.config(fg=self.c["accent"])
-        self.lbl_ram = stat_cell(1, "RAM", "ram")
-        self.lbl_ram.config(fg="#5BA4CF")
+        f_ram = tk.Frame(stats, bg=self.c["bg_panel"])
+        f_ram.grid(row=0, column=1, padx=8, pady=10)
+        tk.Label(f_ram, text="RAM", fg=self.c["text_muted"], bg=self.c["bg_panel"], font=(None, 9)).pack()
+        f_ram_row = tk.Frame(f_ram, bg=self.c["bg_panel"])
+        f_ram_row.pack()
+        self.lbl_ram = tk.Label(
+            f_ram_row, text="--", font=(None, 18, "bold"), bg=self.c["bg_panel"], fg="#5BA4CF"
+        )
+        self.lbl_ram.pack(side=tk.LEFT)
+        self.lbl_ram_pct = tk.Label(
+            f_ram_row,
+            text="",
+            font=(None, 10),
+            bg=self.c["bg_panel"],
+            fg="#5BA4CF",
+        )
+        self.lbl_ram_pct.pack(side=tk.LEFT, padx=(4, 0))
         self.lbl_players_big = stat_cell(2, "PLAYERS", "pl")
         self.lbl_players_big.config(fg="#70C48A")
         self.lbl_uptime_big = stat_cell(3, "UPTIME", "up")
@@ -537,34 +554,57 @@ class WindroseServerManagerApp:
 
         pad = tk.Frame(inner, bg=self.c["bg"])
         pad.pack(fill=tk.BOTH, expand=True, padx=14, pady=10)
+        pad.columnconfigure(0, weight=1, uniform="tools_cols")
+        pad.columnconfigure(1, weight=1, uniform="tools_cols")
 
-        def section(title):
-            ttk.Label(pad, text=title, style="Section.TLabel").pack(anchor="w")
-            fr = self._panel_frame(pad)
-            fr.pack(fill=tk.X, pady=(0, 10))
+        _wrap_half = 300
+
+        def tools_section(parent: tk.Frame, title: str) -> tk.Frame:
+            ttk.Label(parent, text=title, style="Section.TLabel").pack(anchor="w")
+            fr = self._panel_frame(parent)
+            fr.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
             box = tk.Frame(fr, bg=self.c["bg_panel"])
-            box.pack(fill=tk.X, padx=12, pady=10)
+            box.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
             return box
 
-        u = section("App Update")
+        r0a = tk.Frame(pad, bg=self.c["bg"])
+        r0a.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=(0, 10))
+        r0b = tk.Frame(pad, bg=self.c["bg"])
+        r0b.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=(0, 10))
+        r1a = tk.Frame(pad, bg=self.c["bg"])
+        r1a.grid(row=1, column=0, sticky="nsew", padx=(0, 6), pady=(0, 10))
+        r1b = tk.Frame(pad, bg=self.c["bg"])
+        r1b.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(0, 10))
+
+        u = tools_section(r0a, "App Update")
         uf = tk.Frame(u, bg=self.c["bg_panel"])
         uf.pack(fill=tk.X)
         self.lbl_cur_ver = tk.Label(uf, text="Current version: ...", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_cur_ver.pack(side=tk.LEFT, padx=(0, 12))
         tk_button(uf, "Check for Updates", self._on_check_update, small=True).pack(side=tk.LEFT, padx=2)
         tk_button(uf, "Patch Notes", self._on_patch_notes, small=True).pack(side=tk.LEFT, padx=2)
-        self.lbl_update_status = tk.Label(u, text="", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10), wraplength=620, justify=tk.LEFT)
+        self.lbl_update_status = tk.Label(
+            u, text="", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10), wraplength=_wrap_half, justify=tk.LEFT
+        )
         self.lbl_update_status.pack(anchor="w", pady=6)
 
-        h = section("Hosting Client")
+        h = tools_section(r0b, "Hosting Client")
         hf = tk.Frame(h, bg=self.c["bg_panel"])
         hf.pack(fill=tk.X)
         self.lbl_client_mode = tk.Label(hf, text="Current mode: Steam", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_client_mode.pack(side=tk.LEFT, padx=(0, 12))
         tk_button(hf, "Switch Client Mode", self._on_switch_client, small=True).pack(side=tk.LEFT)
-        tk.Label(h, text="Use this to switch between Steam and SteamCMD setup without deleting settings.", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10), wraplength=600, justify=tk.LEFT).pack(anchor="w", pady=4)
+        tk.Label(
+            h,
+            text="Use this to switch between Steam and SteamCMD setup without deleting settings.",
+            fg=self.c["text_dim"],
+            bg=self.c["bg_panel"],
+            font=(None, 10),
+            wraplength=_wrap_half,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=4)
 
-        b = section("Backup")
+        b = tools_section(r1a, "Backup")
         bf = tk.Frame(b, bg=self.c["bg_panel"])
         bf.pack(fill=tk.X)
         tk_button(bf, "Backup Server Now", self._on_backup, bg=self.c["green_btn"]).pack(side=tk.LEFT, padx=2)
@@ -589,7 +629,7 @@ class WindroseServerManagerApp:
         self.lbl_next_backup = tk.Label(b, text="", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10))
         self.lbl_next_backup.pack(anchor="w")
 
-        s = section("Scheduled Restart")
+        s = tools_section(r1b, "Scheduled Restart")
         sf = tk.Frame(s, bg=self.c["bg_panel"])
         sf.pack(anchor="w")
         self.var_schedule = tk.BooleanVar(value=False)
@@ -597,6 +637,67 @@ class WindroseServerManagerApp:
         self.ent_schedule_time = ttk.Entry(sf, width=8)
         self.ent_schedule_time.insert(0, "04:00")
         self.ent_schedule_time.pack(side=tk.LEFT, padx=6)
+
+        discord_row = tk.Frame(pad, bg=self.c["bg"])
+        discord_row.grid(row=2, column=0, columnspan=2, sticky="ew")
+        d_hdr = tk.Frame(discord_row, bg=self.c["bg"])
+        d_hdr.pack(anchor="w", fill=tk.X)
+        ttk.Label(d_hdr, text="Discord Notifications", style="Section.TLabel").pack(side=tk.LEFT, anchor="w")
+        _info_sz = 18
+        _ica = self.c["accent"]
+        canvas_d_discord_info = tk.Canvas(
+            d_hdr, width=_info_sz, height=_info_sz, bg=self.c["bg"], highlightthickness=0, cursor="hand2"
+        )
+        _m = 1.0
+        canvas_d_discord_info.create_oval(_m, _m, _info_sz - _m, _info_sz - _m, outline=_ica, width=1.5)
+        canvas_d_discord_info.create_text(
+            _info_sz / 2,
+            _info_sz / 2 + 0.5,
+            text="i",
+            fill=_ica,
+            font=(None, 9, "bold"),
+            anchor=tk.CENTER,
+        )
+        canvas_d_discord_info.pack(side=tk.LEFT, padx=(4, 0), pady=0, anchor="w")
+        HoverToolTip(
+            canvas_d_discord_info,
+            "Post to a channel using a webhook URL from Discord (Server Settings → Integrations → Webhooks).\n\n"
+            "Only official discord.com webhook URLs are accepted.\n\n"
+            "To ping a person, use a real mention: <@user_id> (enable Advanced → Developer Mode in Discord, "
+            "then right-click the user → Copy User ID).\n"
+            "A plain @DisplayName in the text is not a mention.\nFor a role, use <@&role_id>.",
+        )
+        d_fr = self._panel_frame(discord_row)
+        d_fr.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        d = tk.Frame(d_fr, bg=self.c["bg_panel"])
+        d.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+        self.var_discord_enabled = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            d,
+            text="Send notifications for stop, restart, scheduled restart, and unexpected shutdown",
+            variable=self.var_discord_enabled,
+        ).pack(anchor="w")
+        tk.Label(d, text="Webhook URL", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10)).pack(
+            anchor="w", pady=(8, 2)
+        )
+        self.ent_discord_url = ttk.Entry(d, width=72)
+        self.ent_discord_url.pack(anchor="w", fill=tk.X)
+
+        def _discord_msg_row(lbl: str) -> ttk.Entry:
+            tk.Label(d, text=lbl, fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10)).pack(
+                anchor="w", pady=(8, 2)
+            )
+            e = ttk.Entry(d, width=72)
+            e.pack(anchor="w", fill=tk.X)
+            return e
+
+        self.ent_discord_msg_stop = _discord_msg_row("Message when the server is stopped:")
+        self.ent_discord_msg_restart = _discord_msg_row("Message when the server is restarted (manual or toolbar):")
+        self.ent_discord_msg_schedule = _discord_msg_row("Message when a daily scheduled restart begins:")
+        self.ent_discord_msg_crash = _discord_msg_row("Message when the server process ends unexpectedly:")
+        df = tk.Frame(d, bg=self.c["bg_panel"])
+        df.pack(anchor="w", pady=(10, 0))
+        tk_button(df, "Send test message", self._on_discord_test, small=True).pack(side=tk.LEFT, padx=(0, 8))
 
     def _build_tab_install(self) -> None:
         tab = tk.Frame(self.nb, bg=self.c["bg"])
@@ -764,12 +865,16 @@ class WindroseServerManagerApp:
             if self.watchdog_tick % 10 == 0:
                 self._refresh_player_list()
         elif not proc and ui_running:
-            self._set_ui_stopped()
-            self.log("Server process ended unexpectedly.")
-            self.server_popen = None
-            if self.var_auto_restart.get():
-                self.log("Auto-restarting...")
-                self._do_restart()
+            if self._restart_pending:
+                pass
+            else:
+                self._set_ui_stopped()
+                self.log("Server process ended unexpectedly.")
+                self._discord_notify_crash()
+                self.server_popen = None
+                if self.var_auto_restart.get():
+                    self.log("Auto-restarting...")
+                    self._do_restart("crash")
         if self.var_schedule.get():
             now_hm = datetime.now().strftime("%H:%M")
             target = self.ent_schedule_time.get().strip()
@@ -777,7 +882,7 @@ class WindroseServerManagerApp:
             if now_hm == target and self.last_schedule_date != today:
                 self.last_schedule_date = today
                 self.log("Scheduled daily restart.")
-                self._do_restart()
+                self._do_restart("schedule")
         if self.paths.server_exe.is_file():
             self.canvas_install.itemconfig(self._install_dot, fill="#00FF00")
             self.lbl_install_status.config(text="Server installed.", fg=self.c["green"])
@@ -852,6 +957,7 @@ class WindroseServerManagerApp:
     def _reset_stats(self) -> None:
         self.lbl_cpu.config(text="--")
         self.lbl_ram.config(text="--")
+        self.lbl_ram_pct.config(text="")
         self.lbl_players_big.config(text="--")
         self.lbl_uptime_big.config(text="--")
         self.lbl_uptime_hdr.config(text="")
@@ -870,8 +976,13 @@ class WindroseServerManagerApp:
             self.prev_cpu_time = proc.cpu_times().user + proc.cpu_times().system
             self.prev_cpu_check = now
             self.lbl_cpu.config(text=f"{cpu_pct}%")
-            ram_mb = round(proc.memory_info().rss / (1024 * 1024), 1)
-            self.lbl_ram.config(text=f"{ram_mb/1024:.1f} GB" if ram_mb >= 1024 else f"{ram_mb} MB")
+            rss = proc.memory_info().rss
+            ram_mb = round(rss / (1024 * 1024), 1)
+            total_ram = psutil.virtual_memory().total or 1
+            ram_pct = round((rss / total_ram) * 100, 1)
+            size_str = f"{ram_mb / 1024:.1f} GB" if ram_mb >= 1024 else f"{ram_mb} MB"
+            self.lbl_ram.config(text=size_str)
+            self.lbl_ram_pct.config(text=f"({ram_pct}%)")
             snap = ",".join(sorted(self.online_players))
             if snap != self.last_player_snapshot:
                 self.last_player_snapshot = snap
@@ -1011,7 +1122,66 @@ class WindroseServerManagerApp:
         self.mgr.backup_interval_unit = interval_unit
         self.mgr.schedule_enabled = self.var_schedule.get()
         self.mgr.schedule_time = self.ent_schedule_time.get().strip()
+        self._sync_discord_mgr_from_ui()
         settings.save_manager_settings(self.paths, self.mgr, self.client)
+
+    def _sync_discord_mgr_from_ui(self) -> None:
+        self.mgr.discord_webhook_enabled = self.var_discord_enabled.get()
+        self.mgr.discord_webhook_url = self.ent_discord_url.get().strip()
+        self.mgr.discord_msg_stop = (
+            self.ent_discord_msg_stop.get().strip() or settings.DEFAULT_DISCORD_MSG_STOP
+        )
+        self.mgr.discord_msg_restart = (
+            self.ent_discord_msg_restart.get().strip() or settings.DEFAULT_DISCORD_MSG_RESTART
+        )
+        self.mgr.discord_msg_schedule = (
+            self.ent_discord_msg_schedule.get().strip() or settings.DEFAULT_DISCORD_MSG_SCHEDULE
+        )
+        self.mgr.discord_msg_crash = (
+            self.ent_discord_msg_crash.get().strip() or settings.DEFAULT_DISCORD_MSG_CRASH
+        )
+
+    def _discord_maybe_send(self, content: str) -> None:
+        self._sync_discord_mgr_from_ui()
+        if not self.mgr.discord_webhook_enabled:
+            return
+        url = (self.mgr.discord_webhook_url or "").strip()
+        if not discord_webhook.is_valid_discord_webhook_url(url):
+            return
+        msg = (content or "").strip()
+        if not msg:
+            return
+
+        def worker() -> None:
+            ok, err = discord_webhook.send_discord_webhook(url, msg)
+            if not ok:
+                self.root.after(0, lambda e=err: self.log(f"Discord webhook failed: {e}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _discord_notify_crash(self) -> None:
+        self._discord_maybe_send(
+            self.ent_discord_msg_crash.get().strip() or settings.DEFAULT_DISCORD_MSG_CRASH
+        )
+
+    def _on_discord_test(self) -> None:
+        self._sync_discord_mgr_from_ui()
+        settings.save_manager_settings(self.paths, self.mgr, self.client)
+        url = (self.mgr.discord_webhook_url or "").strip()
+        if not discord_webhook.is_valid_discord_webhook_url(url):
+            self.log("Discord: enter a valid https://discord.com/api/webhooks/... URL.")
+            return
+
+        def worker() -> None:
+            ok, err = discord_webhook.send_discord_webhook(
+                url, "Windrose Server Manager: **test** notification (webhook OK)."
+            )
+            if ok:
+                self.root.after(0, lambda: self.log("Discord test message sent."))
+            else:
+                self.root.after(0, lambda e=err: self.log(f"Discord webhook failed: {e}"))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _load_all_settings(self) -> None:
         self.mgr = settings.load_manager_settings(self.paths)
@@ -1023,6 +1193,17 @@ class WindroseServerManagerApp:
         self.var_schedule.set(self.mgr.schedule_enabled)
         self.ent_schedule_time.delete(0, tk.END)
         self.ent_schedule_time.insert(0, self.mgr.schedule_time)
+        self.var_discord_enabled.set(self.mgr.discord_webhook_enabled)
+        self.ent_discord_url.delete(0, tk.END)
+        self.ent_discord_url.insert(0, self.mgr.discord_webhook_url)
+        for ent, val in (
+            (self.ent_discord_msg_stop, self.mgr.discord_msg_stop),
+            (self.ent_discord_msg_restart, self.mgr.discord_msg_restart),
+            (self.ent_discord_msg_schedule, self.mgr.discord_msg_schedule),
+            (self.ent_discord_msg_crash, self.mgr.discord_msg_crash),
+        ):
+            ent.delete(0, tk.END)
+            ent.insert(0, val)
         if self.mgr.steamcmd_force_install_dir:
             self.client.steamcmd_force_install_dir = self.mgr.steamcmd_force_install_dir
             settings.sync_steamcmd_sidecar(
@@ -1455,6 +1636,9 @@ class WindroseServerManagerApp:
             self.log(f"Failed to start: {e}")
 
     def _on_stop(self) -> None:
+        self._discord_maybe_send(
+            self.ent_discord_msg_stop.get().strip() or settings.DEFAULT_DISCORD_MSG_STOP
+        )
         process_ops.stop_all_server_processes()
         self.server_popen = None
         self.start_time = None
@@ -1462,19 +1646,31 @@ class WindroseServerManagerApp:
         self._read_world_config_ui()
         self.log("Server stopped.")
 
-    def _do_restart(self) -> None:
+    def _do_restart(self, reason: str = "manual") -> None:
+        self._restart_pending = True
+        if reason == "manual":
+            self._discord_maybe_send(
+                self.ent_discord_msg_restart.get().strip() or settings.DEFAULT_DISCORD_MSG_RESTART
+            )
+        elif reason == "schedule":
+            self._discord_maybe_send(
+                self.ent_discord_msg_schedule.get().strip() or settings.DEFAULT_DISCORD_MSG_SCHEDULE
+            )
         process_ops.stop_all_server_processes()
         self.root.after(1500, self._restart_after_kill)
 
     def _restart_after_kill(self) -> None:
-        self._on_start()
-        self.log_position = 0
-        self.log_buffer.clear()
-        self.online_players.clear()
-        self.log("Server restarted.")
+        try:
+            self._on_start()
+            self.log_position = 0
+            self.log_buffer.clear()
+            self.online_players.clear()
+            self.log("Server restarted.")
+        finally:
+            self._restart_pending = False
 
     def _on_restart(self) -> None:
-        self._do_restart()
+        self._do_restart("manual")
 
     def _on_open_folder(self) -> None:
         subprocess.Popen(["explorer", str(self.paths.server_dir)])
