@@ -10,6 +10,7 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 - **Steam and SteamCMD support** - With ability to switch on-demand
 - **Guided Installation Wizard** — When first launching the Server Manager you will be guided on how to get your dedicated server up and running via Steam or SteamCMD
+- **Discord Integration** - Send notifications to a Discord channel when the server starts, stops, restarts, schedules a restart, or crashes
 - **One-click Start / Stop / Restart**
 - **Automated Game Server Updater**
 - **Automated Server Manager Updater**
