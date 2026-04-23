@@ -4,4 +4,5 @@ build/
 dist/
 windrose_manager/__pycache__
 Windrose-Server-Manager.spec
+Windrose-Server-Manager-Debug.spec
 windrose_client_settings.json

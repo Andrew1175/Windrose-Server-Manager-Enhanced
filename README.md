@@ -34,16 +34,14 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 ### How to Run
 
-1. **Download the latest version**: - Extract the .zip to a folder of your choice. Be sure to keep all contents in the .zip together:
-  - Windrose-Server-Manager.exe
-  - _internal (Folder)
-   ```
-   https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases/latest
-   ```
-2. **Run `Windrose-Server-Manager.exe`**
-3. Follow the Setup Wizard to configure a new dedicated server or to use your pre-existing one.
-4. Click **Install Server** — Only if using SteamCMD.
-5. Switch to the **Dashboard** tab and click **Start**.
+1. **Download the latest version** - https://github.com/Andrew1175/Windrose-Server-Manager-Enhanced/releases/latest. Do not download the debug version unless you're encountering issues.
+2. Extract the .zip to a folder of your choice. Be sure to keep all contents in the .zip together:
+    - Windrose-Server-Manager.exe
+    - _internal (Folder)
+3. **Run `Windrose-Server-Manager.exe`**
+4. Follow the Setup Wizard to configure a new dedicated server or to use your pre-existing one.
+5. Click **Install Server** — Only if using SteamCMD.
+6. Switch to the **Dashboard** tab and click **Start**.
 
 ---
 
