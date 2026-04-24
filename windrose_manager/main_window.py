@@ -177,6 +177,8 @@ class WindroseServerManagerApp:
         self._update_op_result: dict | None = None
         self._install_blocked_by_running = False
         self._restart_pending = False
+        self._stop_pending = False
+        self._stop_pending_logged = False
 
         apply_dark_theme(root)
         root.title("Windrose Server Manager")
@@ -404,7 +406,13 @@ class WindroseServerManagerApp:
         bot = tk.Frame(tab, bg=self.c["bg"])
         bot.grid(row=2, column=0, sticky="ew", padx=12, pady=8)
         self.var_auto_restart = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bot, text="Auto-restart if crashed", variable=self.var_auto_restart).pack(side=tk.LEFT)
+        self.chk_auto_restart = ttk.Checkbutton(bot, text="Auto-restart if crashed", variable=self.var_auto_restart)
+        self.chk_auto_restart.pack(side=tk.LEFT)
+        auto_restart_tip = (
+            "This will only Auto-Restart the server if the Server Manager detects an unexpected crash. "
+            "If you manually stop the server you will need to manually start it again."
+        )
+        HoverToolTip(self.chk_auto_restart, auto_restart_tip)
 
     def _build_tab_insights(self) -> None:
         tab = tk.Frame(self.nb, bg=self.c["bg"])
@@ -798,6 +806,10 @@ class WindroseServerManagerApp:
         self.ent_schedule_time = ttk.Entry(sf, width=8)
         self.ent_schedule_time.insert(0, "04:00")
         self.ent_schedule_time.pack(side=tk.LEFT, padx=6)
+        auto_restart_tip = (
+            "This will only Auto-Restart the server if the Server Manager detects an unexpected crash. "
+            "If you manually stop the server you will need to manually start it again."
+        )
 
         discord_row = tk.Frame(pad, bg=self.c["bg"])
         discord_row.grid(row=2, column=0, columnspan=2, sticky="ew")
@@ -855,7 +867,18 @@ class WindroseServerManagerApp:
         self.ent_discord_msg_stop = _discord_msg_row("Message when the server is stopped:")
         self.ent_discord_msg_restart = _discord_msg_row("Message when the server is restarted (manual or toolbar):")
         self.ent_discord_msg_schedule = _discord_msg_row("Message when a daily scheduled restart begins:")
-        self.ent_discord_msg_crash = _discord_msg_row("Message when the server process ends unexpectedly:")
+        lbl_crash_msg = tk.Label(
+            d,
+            text="Message when the server process ends unexpectedly:",
+            fg=self.c["text_dim"],
+            bg=self.c["bg_panel"],
+            font=(None, 10),
+        )
+        lbl_crash_msg.pack(anchor="w", pady=(8, 2))
+        self.ent_discord_msg_crash = ttk.Entry(d, width=72)
+        self.ent_discord_msg_crash.pack(anchor="w", fill=tk.X)
+        HoverToolTip(lbl_crash_msg, auto_restart_tip)
+        HoverToolTip(self.ent_discord_msg_crash, auto_restart_tip)
         df = tk.Frame(d, bg=self.c["bg_panel"])
         df.pack(anchor="w", pady=(10, 0))
         tk_button(df, "Send test message", self._on_discord_test, small=True).pack(side=tk.LEFT, padx=(0, 8))
@@ -1091,10 +1114,20 @@ class WindroseServerManagerApp:
         self.watchdog_tick += 1
         proc = process_ops.get_server_process()
         ui_running = "Running" in self.lbl_status.cget("text")
+        if self._stop_pending and not proc:
+            # Intentional stop completed; do not treat as crash.
+            self._stop_pending = False
+            self._stop_pending_logged = False
         if proc and not ui_running:
-            self._set_ui_running()
-            if self.start_time is None:
-                self.start_time = datetime.now()
+            if self._stop_pending:
+                # Stop was requested; ignore this short shutdown window.
+                if not self._stop_pending_logged:
+                    self.log("Manual stop in progress...")
+                    self._stop_pending_logged = True
+            else:
+                self._set_ui_running()
+                if self.start_time is None:
+                    self.start_time = datetime.now()
         elif proc and ui_running:
             self._update_stats(proc)
             if self.watchdog_tick % 10 == 0:
@@ -2112,6 +2145,8 @@ class WindroseServerManagerApp:
             self.root.after(5000, self._poll_invite_code)
 
     def _on_start(self) -> None:
+        self._stop_pending = False
+        self._stop_pending_logged = False
         if not self.paths.server_exe.is_file():
             self.log("Server not installed.")
             return
@@ -2138,6 +2173,9 @@ class WindroseServerManagerApp:
             self.log(f"Failed to start: {e}")
 
     def _on_stop(self) -> None:
+        self._stop_pending = True
+        self._stop_pending_logged = False
+        self._restart_pending = False
         self._discord_maybe_send(
             self.ent_discord_msg_stop.get().strip() or settings.DEFAULT_DISCORD_MSG_STOP
         )
@@ -2150,6 +2188,8 @@ class WindroseServerManagerApp:
 
     def _do_restart(self, reason: str = "manual") -> None:
         self._restart_pending = True
+        self._stop_pending = False
+        self._stop_pending_logged = False
         if reason == "manual":
             self._discord_maybe_send(
                 self.ent_discord_msg_restart.get().strip() or settings.DEFAULT_DISCORD_MSG_RESTART

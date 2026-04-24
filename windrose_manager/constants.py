@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -14,6 +14,11 @@ GITHUB_ISSUES_NEW_URL = "https://github.com/Andrew1175/Windrose-Server-Manager-E
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.2.1": [
+        "Fixed an issue where the Server Manager would incorrectly register a manual restart or stop as a crash.",
+        "Fixed the 'Auto-restart if crashed' checkbox to only take affect if the server actually crashed and was not manually stopped.",
+        "Added a hover tooltip to the 'Auto-restart if crashed' checkbox to explain how it works.",
+    ],
     "1.2.0": [
         "Added a new Insights tab to the Server Manager to provide information about server activity.",
         "Added a new Player Activity section to track the activity of players who have connected to the game server and their total session times",
