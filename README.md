@@ -45,13 +45,17 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 
 ## Screenshots
 
-| Dashboard                          | Config                       |
+| Dashboard                          | Insights                       |
 | ---------------------------------- | ---------------------------- |
-| ![Dashboard](Images/Dashboard.png) | ![Config](Images/Config.png) |
+| ![Dashboard](Images/Dashboard.png) | ![Insights](Images/Insights.png) |
 
-| Log                    | Tools                    |
+| Config                    | Log                    |
 | ---------------------- | ---------------------- |
-| ![Log](Images/Log.png) | ![Tools](Images/Tools.png) |
+| ![Config](Images/Config.png) | ![Log](Images/Log.png) |
+
+| Tools                    |                     |
+| ---------------------- | ---------------------- |
+| ![Tools](Images/Tools.png) |  |
 
 ---
 
