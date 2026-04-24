@@ -157,6 +157,13 @@ class WindroseServerManagerApp:
         self.online_players: set[str] = set()
         self.account_to_player: dict[str, str] = {}
         self.last_player_snapshot = ""
+        self._player_total_seconds: dict[str, float] = {}
+        self._player_session_start_totals: dict[str, datetime] = {}
+        self._hourly_online_seconds: list[float] = [0.0] * 24
+        self._player_session_start_hourly: dict[str, datetime] = {}
+        self._insights_last_updated_ts: str | None = None
+        self._active_times_chart_points: list[tuple[float, float, int, float]] = []
+        self._active_times_tooltip_label: tk.Label | None = None
         self.watchdog_tick = 0
         self.last_schedule_date: date | None = None
         self._poll_invite_after: str | None = None
@@ -252,6 +259,7 @@ class WindroseServerManagerApp:
         self.nb.configure(padding=0)
         self.nb.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         self._build_tab_dashboard()
+        self._build_tab_insights()
         self._build_tab_config()
         self._build_tab_log()
         self._build_tab_tools()
@@ -267,7 +275,7 @@ class WindroseServerManagerApp:
             cursor="hand2",
         )
         self.lbl_version_corner.place(relx=1.0, rely=0.12, anchor="ne", x=-12, y=0)
-        self.lbl_version_corner.bind("<Button-1>", lambda e: self.nb.select(self.nb.tabs()[3]))
+        self.lbl_version_corner.bind("<Button-1>", lambda e: self._select_tools_tab())
 
         # Footer buttons
         foot = tk.Frame(root, bg=c["bg"])
@@ -296,6 +304,12 @@ class WindroseServerManagerApp:
     def _panel_frame(self, parent) -> tk.Frame:
         f = tk.Frame(parent, bg=self.c["bg_panel"], highlightbackground=self.c["border"], highlightthickness=1)
         return f
+
+    def _select_tools_tab(self) -> None:
+        for tab_id in self.nb.tabs():
+            if self.nb.tab(tab_id, "text") == "Tools":
+                self.nb.select(tab_id)
+                return
 
     def _bind_mousewheel(self, canvas: tk.Canvas) -> None:
         def _on_mousewheel(event):
@@ -377,7 +391,7 @@ class WindroseServerManagerApp:
         hf.rowconfigure(1, weight=1)
         hh = tk.Frame(hf, bg=self.c["bg"])
         hh.grid(row=0, column=0, sticky="ew")
-        ttk.Label(hh, text="Player History", style="Section.TLabel").pack(side=tk.LEFT)
+        ttk.Label(hh, text="Player Connection History", style="Section.TLabel").pack(side=tk.LEFT)
         tk_button(hh, "Clear", self._on_clear_history, bg=self.c["history_clear"], small=True).pack(side=tk.RIGHT)
         h_box = self._panel_frame(hf)
         h_box.grid(row=1, column=0, sticky="nsew", pady=4)
@@ -391,6 +405,93 @@ class WindroseServerManagerApp:
         bot.grid(row=2, column=0, sticky="ew", padx=12, pady=8)
         self.var_auto_restart = tk.BooleanVar(value=False)
         ttk.Checkbutton(bot, text="Auto-restart if crashed", variable=self.var_auto_restart).pack(side=tk.LEFT)
+
+    def _build_tab_insights(self) -> None:
+        tab = tk.Frame(self.nb, bg=self.c["bg"])
+        self.nb.add(tab, text="Insights")
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(0, weight=1)
+        tab.rowconfigure(1, weight=1)
+
+        p_wrap = tk.Frame(tab, bg=self.c["bg"])
+        p_wrap.grid(row=0, column=0, sticky="nsew", padx=12, pady=(12, 6))
+        p_wrap.columnconfigure(0, weight=1)
+        p_wrap.rowconfigure(1, weight=1)
+        p_hdr = tk.Frame(p_wrap, bg=self.c["bg"])
+        p_hdr.grid(row=0, column=0, sticky="ew")
+        ttk.Label(p_hdr, text="Player Activity", style="Section.TLabel").pack(side=tk.LEFT)
+        tk_button(
+            p_hdr,
+            "Clear",
+            self._on_clear_player_activity_insights,
+            bg=self.c["history_clear"],
+            small=True,
+        ).pack(side=tk.RIGHT)
+        p_box = self._panel_frame(p_wrap)
+        p_box.grid(row=1, column=0, sticky="nsew", pady=4)
+        self.list_player_activity = tk.Listbox(
+            p_box,
+            bg="#111E2A",
+            fg=self.c["text"],
+            borderwidth=0,
+            highlightthickness=0,
+            font=("Consolas", 10),
+        )
+        self.list_player_activity.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.lbl_player_activity_updated = tk.Label(
+            p_wrap,
+            text="Last updated: --",
+            fg=self.c["text_dim"],
+            bg=self.c["bg"],
+            font=(None, 9),
+        )
+        self.lbl_player_activity_updated.grid(row=2, column=0, sticky="w", pady=(2, 0))
+
+        h_wrap = tk.Frame(tab, bg=self.c["bg"])
+        h_wrap.grid(row=1, column=0, sticky="nsew", padx=12, pady=(6, 12))
+        h_wrap.columnconfigure(0, weight=1)
+        h_wrap.rowconfigure(1, weight=1)
+        h_hdr = tk.Frame(h_wrap, bg=self.c["bg"])
+        h_hdr.grid(row=0, column=0, sticky="ew")
+        ttk.Label(h_hdr, text="Most Active Times", style="Section.TLabel").pack(side=tk.LEFT)
+        tk_button(
+            h_hdr,
+            "Clear",
+            self._on_clear_active_times_insights,
+            bg=self.c["history_clear"],
+            small=True,
+        ).pack(side=tk.RIGHT)
+        h_box = self._panel_frame(h_wrap)
+        h_box.grid(row=1, column=0, sticky="nsew", pady=4)
+        h_box.columnconfigure(0, weight=1)
+        h_box.rowconfigure(1, weight=1)
+        self.canvas_active_times = tk.Canvas(
+            h_box,
+            height=150,
+            bg="#0F1A24",
+            highlightthickness=0,
+        )
+        self.canvas_active_times.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.canvas_active_times.bind("<Configure>", lambda _e: self._draw_active_times_chart())
+        self.canvas_active_times.bind("<Motion>", self._on_active_times_chart_motion)
+        self.canvas_active_times.bind("<Leave>", self._hide_active_times_tooltip)
+        self.list_active_times = tk.Listbox(
+            h_box,
+            bg="#111E2A",
+            fg=self.c["text"],
+            borderwidth=0,
+            highlightthickness=0,
+            font=("Consolas", 10),
+        )
+        self.list_active_times.grid(row=1, column=0, sticky="nsew", padx=4, pady=(2, 4))
+        self.lbl_active_times_updated = tk.Label(
+            h_wrap,
+            text="Last updated: --",
+            fg=self.c["text_dim"],
+            bg=self.c["bg"],
+            font=(None, 9),
+        )
+        self.lbl_active_times_updated.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
     def _build_tab_config(self) -> None:
         tab = tk.Frame(self.nb, bg=self.c["bg"])
@@ -1043,6 +1144,7 @@ class WindroseServerManagerApp:
         self._apply_config_tab_state()
 
     def _set_ui_stopped(self) -> None:
+        self._close_open_insight_sessions()
         self.canvas_status.itemconfig(self._status_dot, fill=self.c["status_stopped"])
         self.lbl_status.config(text="  Stopped", fg=self.c["text_dim"])
         self.btn_start.config(state=tk.NORMAL)
@@ -1189,11 +1291,13 @@ class WindroseServerManagerApp:
                 self.log_buffer.append(line)
 
                 def hist_join(n: str) -> None:
+                    self._on_player_join(n)
                     self._add_history(
                         f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] JOINED: {n}"
                     )
 
                 def hist_leave(n: str, sfx: str) -> None:
+                    self._on_player_leave(n)
                     self._add_history(
                         f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] LEFT: {n}{sfx}"
                     )
@@ -1256,6 +1360,247 @@ class WindroseServerManagerApp:
                 self.list_history.insert(tk.END, ln)
         except OSError:
             pass
+
+    def _accumulate_hourly_seconds(self, start: datetime, end: datetime) -> None:
+        if end <= start:
+            return
+        cur = start
+        while cur < end:
+            next_hour = cur.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            seg_end = next_hour if next_hour < end else end
+            self._hourly_online_seconds[cur.hour] += (seg_end - cur).total_seconds()
+            cur = seg_end
+
+    def _on_player_join(self, name: str, when: datetime | None = None) -> None:
+        ts = when or datetime.now()
+        if name not in self._player_session_start_totals:
+            self._player_session_start_totals[name] = ts
+        if name not in self._player_session_start_hourly:
+            self._player_session_start_hourly[name] = ts
+
+    def _on_player_leave(self, name: str, when: datetime | None = None) -> None:
+        ts = when or datetime.now()
+        started_total = self._player_session_start_totals.pop(name, None)
+        if started_total and ts > started_total:
+            self._player_total_seconds[name] = self._player_total_seconds.get(name, 0.0) + (
+                ts - started_total
+            ).total_seconds()
+
+        started_hour = self._player_session_start_hourly.pop(name, None)
+        if started_hour and ts > started_hour:
+            self._accumulate_hourly_seconds(started_hour, ts)
+
+        self._save_insights_data()
+        self._refresh_insights_ui()
+
+    def _refresh_insights_ui(self) -> None:
+        self.list_player_activity.delete(0, tk.END)
+        if not self._player_total_seconds:
+            self.list_player_activity.insert(tk.END, "No player session history yet.")
+        else:
+            ordered = sorted(self._player_total_seconds.items(), key=lambda kv: kv[1], reverse=True)
+            for name, seconds in ordered:
+                self.list_player_activity.insert(tk.END, f"{name} - {seconds / 3600.0:.2f} hours")
+
+        self._draw_active_times_chart()
+        self.list_active_times.delete(0, tk.END)
+        ranked = sorted(
+            [(hour, secs) for hour, secs in enumerate(self._hourly_online_seconds)],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        if not any(secs > 0 for _, secs in ranked):
+            self.list_active_times.insert(tk.END, "No activity data yet.")
+            self._refresh_insights_last_updated_labels()
+            return
+        for hour, secs in ranked:
+            if secs <= 0:
+                continue
+            self.list_active_times.insert(
+                tk.END,
+                f"{hour:02d}:00 - {hour:02d}:59 - {secs / 3600.0:.2f} player-hours",
+            )
+        self._refresh_insights_last_updated_labels()
+
+    def _draw_active_times_chart(self) -> None:
+        cv = self.canvas_active_times
+        cv.delete("all")
+        self._active_times_chart_points = []
+        self._hide_active_times_tooltip()
+        width = max(cv.winfo_width(), 1)
+        height = max(cv.winfo_height(), 1)
+        left, right, top, bottom = 34, 10, 10, 24
+        plot_w = width - left - right
+        plot_h = height - top - bottom
+        if plot_w <= 10 or plot_h <= 10:
+            return
+
+        vals = [max(0.0, s / 3600.0) for s in self._hourly_online_seconds]
+        vmax = max(vals) if vals else 0.0
+
+        # Axes
+        axis = self.c["border_input"]
+        cv.create_line(left, top, left, top + plot_h, fill=axis, width=1)
+        cv.create_line(left, top + plot_h, left + plot_w, top + plot_h, fill=axis, width=1)
+
+        # X labels (every 3 hours)
+        for h in range(0, 24, 3):
+            x = left + (h / 23.0) * plot_w
+            cv.create_line(x, top + plot_h, x, top + plot_h + 4, fill=axis)
+            cv.create_text(x, top + plot_h + 12, text=f"{h:02d}", fill=self.c["text_dim"], font=(None, 8))
+
+        if vmax <= 0:
+            cv.create_text(
+                left + (plot_w / 2),
+                top + (plot_h / 2),
+                text="No activity data yet",
+                fill=self.c["text_dim"],
+                font=(None, 10),
+            )
+            return
+
+        # Y max label
+        cv.create_text(left - 4, top, text=f"{vmax:.1f}h", anchor="e", fill=self.c["text_dim"], font=(None, 8))
+
+        pts: list[float] = []
+        for i, val in enumerate(vals):
+            x = left + (i / 23.0) * plot_w
+            y = top + plot_h - ((val / vmax) * plot_h)
+            pts.extend([x, y])
+            self._active_times_chart_points.append((x, y, i, val))
+
+        fill_poly = [left, top + plot_h] + pts + [left + plot_w, top + plot_h]
+        cv.create_polygon(*fill_poly, fill="#1A3A5A", outline="")
+        cv.create_line(*pts, fill="#5BA4CF", width=2, smooth=True)
+        for x, y, _hour, _val in self._active_times_chart_points:
+            cv.create_oval(x - 2, y - 2, x + 2, y + 2, fill="#7CC3E8", outline="")
+
+    def _on_active_times_chart_motion(self, event) -> None:
+        if not self._active_times_chart_points:
+            self._hide_active_times_tooltip()
+            return
+        nearest = min(
+            self._active_times_chart_points,
+            key=lambda p: ((p[0] - event.x) ** 2 + (p[1] - event.y) ** 2),
+        )
+        x, y, hour, val = nearest
+        if ((x - event.x) ** 2 + (y - event.y) ** 2) > (14 * 14):
+            self._hide_active_times_tooltip()
+            return
+        if self._active_times_tooltip_label is None:
+            self._active_times_tooltip_label = tk.Label(
+                self.canvas_active_times,
+                bg="#1A2A3A",
+                fg="#C0CDD8",
+                bd=1,
+                relief=tk.SOLID,
+                padx=6,
+                pady=3,
+                font=(None, 9),
+                justify=tk.LEFT,
+            )
+        self._active_times_tooltip_label.config(
+            text=f"{hour:02d}:00 - {hour:02d}:59\n{val:.2f} player-hours"
+        )
+        tx = min(max(event.x + 12, 4), max(self.canvas_active_times.winfo_width() - 150, 4))
+        ty = min(max(event.y - 34, 4), max(self.canvas_active_times.winfo_height() - 40, 4))
+        self._active_times_tooltip_label.place(x=tx, y=ty)
+        self._active_times_tooltip_label.lift()
+
+    def _hide_active_times_tooltip(self, _event=None) -> None:
+        if self._active_times_tooltip_label is not None:
+            self._active_times_tooltip_label.place_forget()
+
+    def _close_open_insight_sessions(self, when: datetime | None = None) -> None:
+        ts = when or datetime.now()
+        for name in list(self._player_session_start_totals.keys()):
+            self._on_player_leave(name, ts)
+
+    def _save_insights_data(self) -> None:
+        self._insights_last_updated_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        payload = {
+            "PlayerTotalsSeconds": self._player_total_seconds,
+            "HourlyOnlineSeconds": self._hourly_online_seconds,
+            "LastUpdated": self._insights_last_updated_ts,
+        }
+        try:
+            self.paths.insights_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _load_insights_data(self) -> None:
+        self._player_total_seconds = {}
+        self._hourly_online_seconds = [0.0] * 24
+        self._insights_last_updated_ts = None
+        if not self.paths.insights_file.is_file():
+            self._refresh_insights_ui()
+            return
+        try:
+            raw = json.loads(self.paths.insights_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            self._refresh_insights_ui()
+            return
+
+        totals = raw.get("PlayerTotalsSeconds") if isinstance(raw, dict) else None
+        if isinstance(totals, dict):
+            clean_totals: dict[str, float] = {}
+            for name, secs in totals.items():
+                if not str(name).strip():
+                    continue
+                try:
+                    sec_val = max(0.0, float(secs))
+                except (TypeError, ValueError):
+                    continue
+                clean_totals[str(name)] = sec_val
+            self._player_total_seconds = clean_totals
+
+        hours = raw.get("HourlyOnlineSeconds") if isinstance(raw, dict) else None
+        if isinstance(hours, list):
+            vals: list[float] = []
+            for idx in range(24):
+                try:
+                    vals.append(max(0.0, float(hours[idx])))
+                except (IndexError, TypeError, ValueError):
+                    vals.append(0.0)
+            self._hourly_online_seconds = vals
+        last_updated = raw.get("LastUpdated") if isinstance(raw, dict) else None
+        if isinstance(last_updated, str) and last_updated.strip():
+            self._insights_last_updated_ts = last_updated.strip()
+
+        self._refresh_insights_ui()
+
+    def _refresh_insights_last_updated_labels(self) -> None:
+        txt = f"Last updated: {self._insights_last_updated_ts}" if self._insights_last_updated_ts else "Last updated: --"
+        self.lbl_player_activity_updated.config(text=txt)
+        self.lbl_active_times_updated.config(text=txt)
+
+    def _on_clear_player_activity_insights(self) -> None:
+        if not messagebox.askyesno(
+            "Clear Player Activity",
+            "Are you sure you want to clear Player Activity totals?",
+        ):
+            self.log("Clear Player Activity canceled.")
+            return
+        self._player_total_seconds = {}
+        now = datetime.now()
+        self._player_session_start_totals = {p: now for p in self.online_players}
+        self._save_insights_data()
+        self._refresh_insights_ui()
+        self.log("Player Activity cleared.")
+
+    def _on_clear_active_times_insights(self) -> None:
+        if not messagebox.askyesno(
+            "Clear Most Active Times",
+            "Are you sure you want to clear Most Active Times data?",
+        ):
+            self.log("Clear Most Active Times canceled.")
+            return
+        self._hourly_online_seconds = [0.0] * 24
+        now = datetime.now()
+        self._player_session_start_hourly = {p: now for p in self.online_players}
+        self._save_insights_data()
+        self._refresh_insights_ui()
+        self.log("Most Active Times cleared.")
 
     def _save_settings(self) -> None:
         self.mgr.auto_restart = self.var_auto_restart.get()
@@ -1371,6 +1716,7 @@ class WindroseServerManagerApp:
         self._read_server_config_ui()
         self._read_world_config_ui()
         self._load_history()
+        self._load_insights_data()
         self._update_setup_wizard()
         if self.client.install_client != "SteamCMD":
             det = self._find_steam_windrose()
@@ -1397,6 +1743,7 @@ class WindroseServerManagerApp:
             self._start_auto_backup_timer()
 
     def _on_close(self) -> None:
+        self._close_open_insight_sessions()
         self._save_settings()
         self.root.destroy()
 
@@ -2030,6 +2377,12 @@ class WindroseServerManagerApp:
         self.log("Auto-backup disabled.")
 
     def _on_clear_history(self) -> None:
+        if not messagebox.askyesno(
+            "Clear Player Connection History",
+            "Are you sure you want to clear Player Connection History?"
+        ):
+            self.log("Clear history canceled.")
+            return
         self.list_history.delete(0, tk.END)
         try:
             if self.paths.history_file.is_file():

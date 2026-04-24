@@ -56,6 +56,10 @@ class ServerPaths:
     def settings_file(self) -> Path:
         return self.server_dir / "manager_settings.json"
 
+    @property
+    def insights_file(self) -> Path:
+        return self.server_dir / "insights_data.json"
+
     def set_root(self, root: str | os.PathLike[str]) -> None:
         self.server_dir = Path(root).expanduser()
         self.__post_init__()
