@@ -1,6 +1,6 @@
 # Developed by: https://github.com/Andrew1175
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 
 # GitHub REST API for the latest published release (used by Check for Updates).
 GITHUB_LATEST_RELEASE_API_URL = (
@@ -14,6 +14,10 @@ GITHUB_ISSUES_NEW_URL = "https://github.com/Andrew1175/Windrose-Server-Manager-E
 WINDROSE_STEAM_APP_ID = "4129620"
 
 PATCH_NOTES: dict[str, list[str]] = {
+    "1.1.3": [
+        "Fixed an issue with the Server Manager updater not working correctly under certain conditions.",
+        "Included a fallback to the Server Manager update process. Any future issues where the updater fails will launch the previous version of the Server Manager.",
+    ],
     "1.1.2": [
         "Created a new help tab to provide additional information about the Server Manager.",
         "Added a new crash counter to the dashboard to track the number of times the game server has crashed.",

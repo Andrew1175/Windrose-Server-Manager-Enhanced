@@ -197,6 +197,53 @@ function LogLine([string]$msg) {
   $line = "$(Get-Date -Format s)  $msg"
   Add-Content -Path $logPath -Value $line -ErrorAction SilentlyContinue
 }
+function Copy-WithRetry([string]$sourcePath, [string]$destPath, [int]$maxAttempts = 25, [int]$delayMs = 800) {
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+      Copy-Item -LiteralPath $sourcePath -Destination $destPath -Recurse -Force -ErrorAction Stop
+      if ($attempt -gt 1) {
+        LogLine ("Copy succeeded after retry attempt {0} for {1}" -f $attempt, [System.IO.Path]::GetFileName($sourcePath))
+      }
+      return
+    } catch {
+      $msg = $_.Exception.Message
+      LogLine ("Copy attempt {0}/{1} failed for {2}: {3}" -f $attempt, $maxAttempts, [System.IO.Path]::GetFileName($sourcePath), $msg)
+      if ($attempt -eq $maxAttempts) { throw }
+      Start-Sleep -Milliseconds $delayMs
+    }
+  }
+}
+function Launch-PreviousAndNotify {
+  try {
+    if ($j.cwd) {
+      if ($j.args) {
+        Start-Process -FilePath $j.exe -ArgumentList $j.args -WorkingDirectory $j.cwd -WindowStyle Normal
+      } else {
+        Start-Process -FilePath $j.exe -WorkingDirectory $j.cwd -WindowStyle Normal
+      }
+    } else {
+      if ($j.args) {
+        Start-Process -FilePath $j.exe -ArgumentList $j.args -WindowStyle Normal
+      } else {
+        Start-Process -FilePath $j.exe -WindowStyle Normal
+      }
+    }
+    LogLine "Fallback relaunch attempted."
+  } catch {
+    LogLine ("Fallback relaunch failed: " + $_.Exception.Message)
+  }
+  try {
+    Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+    [System.Windows.MessageBox]::Show(
+      "There was an error during the update process. Please review the update-helper.log for more information.",
+      "Windrose Server Manager Update Error",
+      [System.Windows.MessageBoxButton]::OK,
+      [System.Windows.MessageBoxImage]::Error
+    ) | Out-Null
+  } catch {
+    LogLine ("Failed to show update error popup: " + $_.Exception.Message)
+  }
+}
 try {
   LogLine "Updater helper started."
   $waitFor = [int]$j.wait_pid
@@ -205,14 +252,27 @@ try {
     if (-not $proc) { break }
     Start-Sleep -Milliseconds 500
   }
+  Start-Sleep -Milliseconds 800
   LogLine "Main process exited. Applying files..."
   $src = $j.source
   $dst = $j.dest
   if (-not (Test-Path -LiteralPath $dst)) {
     New-Item -ItemType Directory -Path $dst -Force | Out-Null
   }
+  # Best-effort cleanup for stale manager processes that may still lock DLLs.
+  $exeName = [System.IO.Path]::GetFileNameWithoutExtension($j.exe)
+  if ($exeName) {
+    Get-Process -Name $exeName -ErrorAction SilentlyContinue | ForEach-Object {
+      try {
+        Stop-Process -Id $_.Id -Force -ErrorAction Stop
+        LogLine ("Stopped stale process {0} ({1}) before copy." -f $_.ProcessName, $_.Id)
+      } catch {
+        LogLine ("Failed to stop stale process {0} ({1}): {2}" -f $_.ProcessName, $_.Id, $_.Exception.Message)
+      }
+    }
+  }
   Get-ChildItem -LiteralPath $src -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $dst -Recurse -Force -ErrorAction Stop
+    Copy-WithRetry -sourcePath $_.FullName -destPath $dst
   }
   LogLine "File copy completed."
   if ($j.cwd) {
@@ -236,6 +296,7 @@ try {
   }
 } catch {
   LogLine ("Updater helper failed: " + $_.Exception.Message)
+  Launch-PreviousAndNotify
 }
 Remove-Item -LiteralPath $selfPath -Force -ErrorAction SilentlyContinue
 """.strip()

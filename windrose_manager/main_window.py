@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import ctypes
+import os
 import re
 import shutil
 import subprocess
@@ -30,6 +32,71 @@ def _bootstrap_client_settings_path() -> Path:
     # Keep a launcher-level copy so startup can remember server root
     # even before we know which server directory to bind paths to.
     return _app_package_dir().parent / "windrose_client_settings.json"
+
+
+def _isolated_dedicated_server_env(working_dir: str) -> dict[str, str]:
+    """
+    A deliberately minimal environment for the dedicated server child process.
+
+    Inheriting the full parent environment can let `WindroseServer-Win64-Shipping.exe` resolve
+    MSVC runtimes (e.g. VCRUNTIME140.dll) from the Server Manager's PyInstaller `_internal`
+    directory (via PATH / DLL search), which then locks those files and breaks Server Manager
+    self-updates while the server is running.
+    """
+    base = {k: v for k, v in os.environ.items() if k in ("SystemRoot", "SystemDrive", "TEMP", "TMP", "USERPROFILE", "COMPUTERNAME", "PATHEXT", "ComSpec", "PSModulePath", "NUMBER_OF_PROCESSORS", "OS", "PROCESSOR_ARCHITECTURE")}
+    # Ensure critical Win32 directory vars exist.
+    system_root = base.get("SystemRoot") or os.environ.get("SystemRoot", r"C:\Windows")
+    windir = base.get("WINDIR") or os.environ.get("WINDIR", system_root)
+    base["SystemRoot"] = system_root
+    base["WINDIR"] = windir
+    # Minimal PATH: shipping exe directory + system dirs (enough for Side-by-side CRT + normal Win32 load).
+    sys32 = str(Path(system_root) / "System32")
+    sys_wow = str(Path(system_root) / "SysWOW64")
+    path_parts = [working_dir, sys32, sys_wow, str(Path(system_root) / "")]
+    # De-dupe while preserving order.
+    seen: set[str] = set()
+    path_clean: list[str] = []
+    for p in path_parts:
+        np = os.path.normcase(os.path.normpath(p))
+        if np in seen:
+            continue
+        seen.add(np)
+        path_clean.append(p)
+    base["PATH"] = os.pathsep.join(path_clean)
+    return base
+
+
+def _reset_windows_dll_directory_for_child_launch() -> tuple[bool, object | None]:
+    """
+    Temporarily reset the Win32 DLL directory to default for child process launch.
+
+    PyInstaller can set a custom DLL directory (typically _MEIPASS/_internal) in the manager
+    process. If that state leaks into child load behavior, the dedicated server may bind
+    VCRUNTIME140.dll from the manager folder and keep it locked.
+    """
+    if os.name != "nt":
+        return False, None
+    try:
+        kernel32 = ctypes.windll.kernel32
+    except Exception:
+        return False, None
+    try:
+        meipass = getattr(sys, "_MEIPASS", None)
+        ok = bool(kernel32.SetDllDirectoryW(None))
+        return ok, meipass
+    except Exception:
+        return False, None
+
+
+def _restore_windows_dll_directory_after_child_launch(meipass: object | None) -> None:
+    if os.name != "nt":
+        return
+    if not meipass:
+        return
+    try:
+        ctypes.windll.kernel32.SetDllDirectoryW(str(meipass))
+    except Exception:
+        pass
 
 
 class HoverToolTip:
@@ -1671,11 +1738,22 @@ class WindroseServerManagerApp:
             else self.paths.server_exe
         )
         creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        self.server_popen = subprocess.Popen(
-            [str(exe)],
-            cwd=str(self.paths.server_dir),
-            creationflags=creation,
-        )
+        # Use the shipping exe folder as the working directory when possible.
+        # If cwd is the manager install tree (or any folder that contains unrelated MSVC
+        # runtimes), Windows DLL search can pick up *_internal\\VCRUNTIME140.dll from the
+        # Server Manager and lock it — which breaks in-place self-updates while the server runs.
+        cwd = str(exe.parent if exe.is_file() else self.paths.server_dir)
+        switched, meipass = _reset_windows_dll_directory_for_child_launch()
+        try:
+            self.server_popen = subprocess.Popen(
+                [str(exe)],
+                cwd=cwd,
+                env=_isolated_dedicated_server_env(cwd),
+                creationflags=creation,
+            )
+        finally:
+            if switched:
+                _restore_windows_dll_directory_after_child_launch(meipass)
 
     def _poll_invite_code(self) -> None:
         self._poll_invite_count += 1
