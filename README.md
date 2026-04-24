@@ -13,6 +13,7 @@ An Open Source dedicated server manager for [Windrose](https://store.steampowere
 - **Automated Game Server Updater**
 - **Automated Server Manager Updater**
 - **Live dashboard** — CPU usage, RAM, player count, uptime, and connected player list
+- **Live Insights** — Player Activity to see who has been active in your server the most. Most Active Times to see when your server is most active, complete with a 24 hour graph!
 - **Live log viewer** — color-coded, filterable (All / Players / Warnings / Errors) with auto-scroll toggle
 - **Config editor** — Edit Server and Gameplay settings directly from the manager
 - **One-click world backup** — Zip your save data to a timestamped archive
