@@ -7,6 +7,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from .http_tls import default_https_context
+
 
 STEAMCMD_ZIP_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 
@@ -22,7 +24,7 @@ def install_steamcmd_from_official_zip(parent_directory: Path) -> Path | None:
         req = urllib.request.Request(
             STEAMCMD_ZIP_URL, headers={"User-Agent": "Windrose-Server-Manager"}
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=120, context=default_https_context()) as resp:
             zip_path.write_bytes(resp.read())
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(steamcmd_dir)

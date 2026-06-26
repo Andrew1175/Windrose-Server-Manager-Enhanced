@@ -107,6 +107,7 @@ def save_client_settings(paths, s: ClientInstallSettings) -> None:
         pass
 
 
+DEFAULT_DISCORD_MSG_START = "Windrose dedicated server **started**."
 DEFAULT_DISCORD_MSG_STOP = "Windrose dedicated server **stopped**."
 DEFAULT_DISCORD_MSG_RESTART = "Windrose dedicated server is **restarting** (manual)."
 DEFAULT_DISCORD_MSG_SCHEDULE = "Windrose dedicated server **scheduled restart** started."
@@ -127,6 +128,7 @@ class ManagerSettings:
     steamcmd_force_install_dir: str | None = None
     discord_webhook_enabled: bool = False
     discord_webhook_url: str = ""
+    discord_msg_start: str = DEFAULT_DISCORD_MSG_START
     discord_msg_stop: str = DEFAULT_DISCORD_MSG_STOP
     discord_msg_restart: str = DEFAULT_DISCORD_MSG_RESTART
     discord_msg_schedule: str = DEFAULT_DISCORD_MSG_SCHEDULE
@@ -164,6 +166,8 @@ def load_manager_settings(paths) -> ManagerSettings:
             m.discord_webhook_enabled = bool(s["DiscordWebhookEnabled"])
         if "DiscordWebhookUrl" in s:
             m.discord_webhook_url = str(s.get("DiscordWebhookUrl") or "").strip()
+        if "DiscordMsgStart" in s:
+            m.discord_msg_start = str(s.get("DiscordMsgStart") or "").strip() or DEFAULT_DISCORD_MSG_START
         if "DiscordMsgStop" in s:
             m.discord_msg_stop = str(s.get("DiscordMsgStop") or "").strip() or DEFAULT_DISCORD_MSG_STOP
         if "DiscordMsgRestart" in s:
@@ -198,6 +202,7 @@ def save_manager_settings(
         "SteamCmdForceInstallDir": client.steamcmd_force_install_dir,
         "DiscordWebhookEnabled": m.discord_webhook_enabled,
         "DiscordWebhookUrl": m.discord_webhook_url,
+        "DiscordMsgStart": m.discord_msg_start,
         "DiscordMsgStop": m.discord_msg_stop,
         "DiscordMsgRestart": m.discord_msg_restart,
         "DiscordMsgSchedule": m.discord_msg_schedule,

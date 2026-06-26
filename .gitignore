@@ -1,4 +1,6 @@
 # Local build files
+.venv/
+__pycache__/
 Create EXE.bat
 build/
 dist/
