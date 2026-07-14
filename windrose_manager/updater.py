@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 from . import constants
+from .http_tls import default_https_context
 
 _USER_AGENT = "Windrose-Server-Manager"
 _ZIP_NAME_RE = re.compile(r"^Windrose-Server-Manager-v\d+(?:\.\d+)+\.zip$", re.IGNORECASE)
@@ -47,7 +48,7 @@ def _http_json(url: str) -> tuple[dict | None, str | None]:
                 "X-GitHub-Api-Version": "2022-11-28",
             },
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60, context=default_https_context()) as resp:
             return json.loads(resp.read().decode("utf-8")), None
     except Exception as e:
         return None, str(e)
@@ -59,7 +60,7 @@ def _http_bytes(url: str) -> tuple[bytes | None, str | None]:
             url,
             headers={"User-Agent": _USER_AGENT, "Accept": "application/octet-stream"},
         )
-        with urllib.request.urlopen(req, timeout=300) as resp:
+        with urllib.request.urlopen(req, timeout=300, context=default_https_context()) as resp:
             return resp.read(), None
     except Exception as e:
         return None, str(e)

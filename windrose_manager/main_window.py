@@ -847,7 +847,7 @@ class WindroseServerManagerApp:
         self.var_discord_enabled = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             d,
-            text="Send notifications for stop, restart, scheduled restart, and unexpected shutdown",
+            text="Send notifications for start, stop, restart, scheduled restart, and unexpected shutdown",
             variable=self.var_discord_enabled,
         ).pack(anchor="w")
         tk.Label(d, text="Webhook URL", fg=self.c["text_dim"], bg=self.c["bg_panel"], font=(None, 10)).pack(
@@ -864,6 +864,7 @@ class WindroseServerManagerApp:
             e.pack(anchor="w", fill=tk.X)
             return e
 
+        self.ent_discord_msg_start = _discord_msg_row("Message when the server is started:")
         self.ent_discord_msg_stop = _discord_msg_row("Message when the server is stopped:")
         self.ent_discord_msg_restart = _discord_msg_row("Message when the server is restarted (manual or toolbar):")
         self.ent_discord_msg_schedule = _discord_msg_row("Message when a daily scheduled restart begins:")
@@ -1649,6 +1650,9 @@ class WindroseServerManagerApp:
     def _sync_discord_mgr_from_ui(self) -> None:
         self.mgr.discord_webhook_enabled = self.var_discord_enabled.get()
         self.mgr.discord_webhook_url = self.ent_discord_url.get().strip()
+        self.mgr.discord_msg_start = (
+            self.ent_discord_msg_start.get().strip() or settings.DEFAULT_DISCORD_MSG_START
+        )
         self.mgr.discord_msg_stop = (
             self.ent_discord_msg_stop.get().strip() or settings.DEFAULT_DISCORD_MSG_STOP
         )
@@ -1719,6 +1723,7 @@ class WindroseServerManagerApp:
         self.ent_discord_url.delete(0, tk.END)
         self.ent_discord_url.insert(0, self.mgr.discord_webhook_url)
         for ent, val in (
+            (self.ent_discord_msg_start, self.mgr.discord_msg_start),
             (self.ent_discord_msg_stop, self.mgr.discord_msg_stop),
             (self.ent_discord_msg_restart, self.mgr.discord_msg_restart),
             (self.ent_discord_msg_schedule, self.mgr.discord_msg_schedule),
@@ -2167,6 +2172,9 @@ class WindroseServerManagerApp:
             self.prev_cpu_check = datetime.now()
             self._set_ui_running()
             self.log("Server started.")
+            self._discord_maybe_send(
+                self.ent_discord_msg_start.get().strip() or settings.DEFAULT_DISCORD_MSG_START
+            )
             self._poll_invite_count = 0
             self._poll_invite_code()
         except OSError as e:
